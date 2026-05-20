@@ -17,3 +17,21 @@ Knowledge about TikTok Shop operations, seller fees, and platform policies.
 | [TikTok Shop Free Samples for Affiliates](tiktok/tiktok-shop-free-samples-for-affiliates.md) | Details of affiliate free samples, Open and Targeted Collaboration samples, approval settings, multi-SKU samples, shipping, combined sample shipments, and creator content requirements. | 2026-05-20 |
 | [TikTok Shop Seller Payouts](tiktok/tiktok-shop-seller-payouts.md) | Details of manual and automatic seller withdrawals, setup requirements, frequency, limits, fees, bank timing, and operational constraints. | 2026-05-20 |
 | [TikTok Shop Tax FAQ](tiktok/tiktok-shop-tax-faq.md) | Summary of TikTok Shop tax FAQ for Indonesian sellers, including PPh 23/26, SKB, COR/DGT, affiliate tax responsibility, PMSE VAT, and invoice treatment. | 2026-05-20 |
+
+## Whatsapp
+
+Knowledge about WhatsApp Business Platform flows, pricing, and messaging operations.
+
+| Article | Summary | Updated |
+| --- | --- | --- |
+| [WhatsApp Flows](whatsapp/whatsapp-flows.md) | Overview of WhatsApp Flows for structured business interactions, including purchase-intent collection, build/test/publish workflow, sending modes, and response handling. | 2026-05-20 |
+| [WhatsApp Business Platform Pricing](whatsapp/whatsapp-business-platform-pricing.md) | Summary of WhatsApp Business Platform per-delivered-message pricing for Indonesia, including marketing and utility rates, utility volume tiers, and message categories. | 2026-05-20 |
+
+## Xendit
+
+Knowledge about Xendit payment platform capabilities, Indonesian payment channels, fees, and platform account operations.
+
+| Article | Summary | Updated |
+| --- | --- | --- |
+| [Xendit xenPlatform](xendit/xendit-xenplatform.md) | Overview of xenPlatform multi-account payments, sub-account concepts, managed versus owned billing, and platform usage fees. | 2026-05-20 |
+| [Xendit QRIS](xendit/xendit-qris.md) | Summary of Xendit's QRIS channel characteristics, payment flow, amount limits, reusable codes, and issuer-specific refund limitations. | 2026-05-20 |

@@ -17,3 +17,8 @@
 - Updated: TikTok Shop Free Samples for Affiliates
 - Updated: TikTok Shop Seller Payouts
 - Updated: TikTok Shop Tax FAQ
+
+## [2026-05-20] ingest | WhatsApp Flows
+- Updated: WhatsApp Business Platform Pricing
+- Updated: Xendit xenPlatform
+- Updated: Xendit QRIS
