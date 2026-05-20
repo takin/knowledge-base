@@ -23,3 +23,6 @@ htmlcov/
 # Tooling implementation details, not wiki corpus content
 .opencode/
 AGENTS.md
+
+# Env file
+# .env*
