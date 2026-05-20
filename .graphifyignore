@@ -1,0 +1,25 @@
+# VCS and local environment
+.git/
+.venv/
+
+# Editor and OS state
+.DS_Store
+.obsidian/
+
+# Generated outputs and caches
+graphify-out/
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+wheels/
+*.egg-info/
+htmlcov/
+.coverage
+
+# Tooling implementation details, not wiki corpus content
+.opencode/
+AGENTS.md

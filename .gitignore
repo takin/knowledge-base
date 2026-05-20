@@ -1,0 +1,28 @@
+# OS/editor noise
+.DS_Store
+
+# Obsidian local/session state only
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+
+# Node dependencies for repo-local OpenCode plugins
+.opencode/node_modules/
+
+# Env Vars
+*.env*
