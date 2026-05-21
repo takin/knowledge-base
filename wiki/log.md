@@ -22,3 +22,21 @@
 - Updated: WhatsApp Business Platform Pricing
 - Updated: Xendit xenPlatform
 - Updated: Xendit QRIS
+
+## [2026-05-20] ingest | Xendit Indonesia Pricing
+- Updated: Xendit QRIS
+- Updated: Xendit xenPlatform
+
+## [2026-05-20] ingest | WhatsApp Service Messages
+- Updated: WhatsApp Business Platform Pricing
+- Updated: WhatsApp Flows
+
+## [2026-05-22] maintenance | Reorganized wiki taxonomy
+- Moved compiled articles from brand-level wiki folders into domain/topic folders.
+- Kept raw source buckets source-oriented and unchanged.
+- Updated wiki index navigation and raw/source-relative links for the new structure.
+
+## [2026-05-22] maintenance | Split wiki index hierarchy
+- Replaced the root wiki index with a concise domain map.
+- Added domain-level indexes for product, engineering, science, business, and design.
+- Added topic-level indexes for product TikTok, product WhatsApp, product Xendit, and engineering WhatsApp.

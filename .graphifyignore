@@ -25,4 +25,11 @@ htmlcov/
 AGENTS.md
 
 # Env file
-# .env*
+.env*
+
+# ignore any images
+*.svg
+*.png
+*.webp
+*.jpeg
+*.jpg
