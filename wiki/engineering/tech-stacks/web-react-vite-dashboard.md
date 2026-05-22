@@ -1,19 +1,21 @@
 # Web Stack: React + Vite Dashboard
 
-Updated: 2026-05-22
+Updated: 2026-05-23
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22); Internal Infrastructure draft (2026-04-15, updated 2026-05-22); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-22)
+Sources: Internal Tech Stacks draft (2026-05-22); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-22); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-22)
 Platform: Web / authenticated SaaS dashboard
 Runtime: Bun
 Framework: React + Vite SPA
 Primary Use Case: Authenticated SaaS dashboards consuming a mandatory separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
-Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md)
+Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md)
 
 ## Summary
 
 React + Vite SPA is the standard for authenticated SaaS dashboards. Dashboard repositories are standalone and separate from landing and API repositories. The dashboard does not need SEO, must not use SSR, and must not own backend logic.
 
 The backend API is mandatory and owns authentication, authorization, validation, persistence, and business rules. The dashboard consumes the backend through generated OpenAPI clients and treats route guards as UX only.
+
+SaaS administration screens for tenant settings, tenant users, subscriptions, entitlements, billing recovery, and soft-lock remediation are dashboard UI concerns only. The backend owns the administration rules, tenant state, subscription state, soft-lock enforcement, operator overrides, and audit records.
 
 This article is the source of truth for dashboard-specific static deployment. Infrastructure docs retain generic Docker Compose and Nginx rules, but dashboard deployment details live here.
 

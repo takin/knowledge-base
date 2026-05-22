@@ -6,12 +6,12 @@ Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
 Platform: Backend API
 Runtime: Bun
 Framework: Elysia
-Primary Use Case: Standalone SaaS APIs, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
+Primary Use Case: Standalone SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
 Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md)
 
 ## Summary
 
-This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, PostgreSQL/Drizzle/PgBouncer for durable data, Redis/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
+This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, backend-owned SaaS administration for tenants/users/subscriptions/soft locks, PostgreSQL/Drizzle/PgBouncer for durable data, Redis/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
 
 The stack has two product profiles:
 - `internal-api` for dashboards, mobile apps, internal operators, and first-party machine clients.
@@ -156,6 +156,93 @@ Rules:
 - Tenant-owned tables include `workspace_id` or equivalent tenant identifier.
 - Tenant-owned service queries must filter by tenant/workspace identifier.
 - Redis may cache resolved permissions with short TTL and explicit invalidation.
+
+## SaaS Administration Baseline
+
+SaaS backend APIs include a generic product administration system for tenant self-service and platform operator administration. The dashboard renders administration UI, but the backend is authoritative for tenant state, tenant membership, subscription state, entitlements, soft locks, billing remediation, operator overrides, and audit records.
+
+Administration surfaces:
+
+| Surface | Actor | Scope | Boundary |
+| --- | --- | --- | --- |
+| Tenant self-service admin | Tenant owners and tenant admins | Their own tenant/workspace only | Normal authenticated API under tenant RBAC |
+| Platform operator admin | Internal support, operations, finance, and platform admins | Cross-tenant operations | Separate admin route group with stronger RBAC and audit requirements |
+
+Tenant self-service admin owns tenant settings, member lists, invitations, member removal, role changes, ownership transfer, subscription/plan visibility, entitlement visibility, billing remediation, and soft-lock recovery instructions.
+
+Platform operator admin owns cross-tenant search/view, subscription and entitlement inspection, manual soft locks, suspension/restoration, billing recovery support, and approved operator overrides.
+
+Rules:
+- Platform operator routes live under a separate route group such as `/api/v1/admin/*`.
+- Platform operator routes require stronger RBAC than tenant admin routes and are hidden from consumer OpenAPI specs unless intentionally documented.
+- Platform operator changes require an audit reason, actor identity, timestamp, and before/after state where feasible.
+- Tenant self-service routes operate on the resolved current tenant, not arbitrary tenant IDs.
+- Billing provider events update subscription records through idempotent webhook processing and must not bypass application state transition rules.
+- The backend, not the dashboard, decides whether an action is blocked by subscription state, entitlement limits, soft lock, suspension, or RBAC.
+
+Core schema concepts are `tenants`, `tenant_members`, `tenant_invitations`, `subscription_plans`, `tenant_subscriptions`, `tenant_entitlements`, `tenant_soft_locks`, `billing_events`, and `audit_logs`.
+
+Terminology rules:
+- `tenant` is the architecture concept.
+- `workspace_id` is acceptable as the default tenant key when product UX calls tenants "workspaces".
+- A product must choose one tenant key convention, such as `workspace_id` or `tenant_id`, and use it consistently.
+- Every tenant-owned business table includes the chosen tenant key.
+- Tenant-scoped uniqueness includes the chosen tenant key.
+
+Tenant state is product access posture; subscription state is billing lifecycle. Soft lock is an enforced access posture, not merely a subscription status.
+
+Tenant states: `active`, `soft_locked`, `suspended`, `archived`, and `deleted_pending`.
+
+Subscription states: `trialing`, `active`, `past_due`, `unpaid`, `expired`, and `cancelled`.
+
+Soft lock default behavior is read-mostly and write-restricted.
+
+Allowed during soft lock:
+- login.
+- view tenant, billing, subscription, invoice, usage, and entitlement state.
+- update payment method, pay invoice, resume subscription, or open approved billing/support flows.
+- export critical data if product policy allows.
+
+Blocked during soft lock:
+- creating product resources.
+- inviting tenant users.
+- using paid features.
+- public API writes.
+- background jobs that consume paid quota.
+- webhook deliveries that represent paid usage.
+- plan changes except approved recovery flows.
+
+Stable error codes include `TENANT_SOFT_LOCKED`, `SUBSCRIPTION_PAST_DUE`, `SUBSCRIPTION_UNPAID`, `SUBSCRIPTION_EXPIRED`, and `PLAN_LIMIT_EXCEEDED`.
+
+Tenant self-service API surface:
+
+```text
+GET    /api/v1/tenants/current
+PATCH  /api/v1/tenants/current
+GET    /api/v1/tenants/current/members
+POST   /api/v1/tenants/current/invitations
+PATCH  /api/v1/tenants/current/members/:memberId/role
+DELETE /api/v1/tenants/current/members/:memberId
+GET    /api/v1/tenants/current/subscription
+GET    /api/v1/tenants/current/entitlements
+POST   /api/v1/tenants/current/billing-portal-session
+```
+
+Platform operator API surface:
+
+```text
+GET    /api/v1/admin/tenants
+GET    /api/v1/admin/tenants/:tenantId
+GET    /api/v1/admin/tenants/:tenantId/subscription
+POST   /api/v1/admin/tenants/:tenantId/soft-lock
+DELETE /api/v1/admin/tenants/:tenantId/soft-lock
+POST   /api/v1/admin/tenants/:tenantId/suspend
+POST   /api/v1/admin/tenants/:tenantId/restore
+```
+
+Soft lock and entitlement enforcement happens in HTTP route guards, service methods, worker enqueue paths, worker execution paths, public API client checks, outbound webhook delivery jobs, and plan-aware rate limit policies.
+
+Mandatory audit events include tenant lifecycle changes, member invitations/removals/role changes, ownership transfer, subscription plan/status changes, entitlement changes, soft-lock apply/clear, operator overrides, and billing recovery actions.
 
 ## Validation, Database, And Migrations
 
@@ -335,7 +422,7 @@ Required backend checks:
 - OpenAPI generation/drift check.
 - Drizzle migration check.
 - Docker build plus API/worker command smoke tests.
-- auth/JWT/JWKS, CORS/CSRF where applicable, RBAC/scope, tenant isolation, idempotency, rate limit, cache invalidation, timeout/body-size, media flow, webhook, queue retry/backoff/DLQ/manual replay, and worker retry/failure tests.
+- auth/JWT/JWKS, CORS/CSRF where applicable, RBAC/scope, tenant isolation, tenant membership/role, tenant self-service admin RBAC, platform operator admin RBAC, subscription state transition, entitlement enforcement, soft lock allowed/blocked action, audit log, idempotency, rate limit, cache invalidation, timeout/body-size, media flow, webhook, queue retry/backoff/DLQ/manual replay, and worker retry/failure tests.
 
 ## Anti-Patterns
 
@@ -345,6 +432,11 @@ Required backend checks:
 | `HS256` for production SaaS/public API JWTs | Asymmetric `jose` signing with JWK/JWKS and `kid` |
 | JWT auth without RBAC/scope/resource checks | JWT identity + workspace membership + RBAC/scopes + ownership |
 | Missing `workspace_id` filters | Tenant-scoped service queries |
+| Dashboard-only tenant administration rules | Backend-owned tenant admin services and RBAC |
+| Treating subscription state as tenant access state | Separate subscription lifecycle from tenant access posture |
+| Soft lock only in frontend route guards | Backend guard, service, worker, public API, and webhook enforcement |
+| Operator tenant changes without audit reason | Operator RBAC plus mandatory audit log reason |
+| Mixing `tenant_id` and `workspace_id` inconsistently | One project-wide tenant key convention |
 | Raw Elysia/Zod/SQL errors | Standard safe error envelope |
 | ESLint as the default backend linter | Oxlint |
 | Prettier or Biome as the default backend formatter | Oxfmt |

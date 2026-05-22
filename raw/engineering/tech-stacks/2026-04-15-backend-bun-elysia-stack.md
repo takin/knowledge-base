@@ -5,7 +5,7 @@ Collected: 2026-04-15
 Published: 2026-04-15
 Updated: 2026-05-23
 Status: Draft
-Scope: Standalone Bun + Elysia backend APIs, SaaS dashboards, mobile APIs, public APIs, webhooks, async workers, and self-hosted VPS deployments
+Scope: Standalone Bun + Elysia backend APIs, SaaS administration, SaaS dashboards, mobile APIs, public APIs, webhooks, async workers, and self-hosted VPS deployments
 
 ---
 
@@ -440,7 +440,181 @@ flowchart TD
     DB --> Result[Return Tenant-Scoped Result]
 ```
 
-### 20.10 Validation
+### 20.10 SaaS Administration Baseline
+
+SaaS backend APIs include a generic product administration system for tenant self-service and platform operator administration. The dashboard renders administration UI, but the backend is authoritative for tenant state, tenant membership, subscription state, entitlements, soft locks, billing remediation, operator overrides, and audit records.
+
+Two administration surfaces are mandatory for SaaS products:
+
+| Surface | Actor | Scope | Boundary |
+|---|---|---|---|
+| Tenant self-service admin | Tenant owners and tenant admins | Their own tenant/workspace only | Normal authenticated API under tenant RBAC |
+| Platform operator admin | Internal support, operations, finance, and platform admins | Cross-tenant operations | Separate admin route group with stronger RBAC and audit requirements |
+
+Tenant self-service admin owns:
+- updating the current tenant/workspace profile and settings
+- listing tenant members
+- inviting tenant users
+- removing tenant users within policy
+- changing tenant user roles within policy
+- transferring tenant ownership through an audited flow
+- viewing the active subscription, plan, billing status, usage, and entitlements
+- starting approved billing remediation flows such as payment-method update, invoice payment, or billing portal session creation
+- seeing soft-lock status and remediation instructions
+
+Platform operator admin owns:
+- searching and viewing tenants across the platform
+- inspecting tenant membership, subscription, billing, entitlement, and soft-lock state
+- applying and clearing manual soft locks with an audit reason
+- suspending and restoring tenants with an audit reason
+- supporting billing recovery and subscription issue investigation
+- applying approved operator overrides with explicit expiry where possible
+
+Rules:
+- Platform operator routes live under a separate route group such as `/api/v1/admin/*`.
+- Platform operator routes require stronger RBAC than tenant admin routes and are hidden from consumer OpenAPI specs unless intentionally documented.
+- Platform operator changes require an audit reason, actor identity, timestamp, and before/after state where feasible.
+- Tenant self-service routes must never allow cross-tenant lookup by arbitrary tenant ID; they operate on the resolved current tenant unless an explicit multi-tenant switcher flow is approved.
+- Billing provider events update subscription records through idempotent webhook processing and must not directly bypass application state transition rules.
+- The backend, not the dashboard, decides whether an action is blocked by subscription state, entitlement limits, soft lock, suspension, or RBAC.
+
+Core schema concepts:
+
+```text
+tenants
+tenant_members
+tenant_invitations
+subscription_plans
+tenant_subscriptions
+tenant_entitlements
+tenant_soft_locks
+billing_events
+audit_logs
+```
+
+Terminology rules:
+- `tenant` is the architecture concept.
+- `workspace_id` is acceptable as the default tenant key when product UX calls tenants "workspaces".
+- A product must choose one tenant key convention, such as `workspace_id` or `tenant_id`, and use it consistently.
+- Do not mix `tenant_id` and `workspace_id` casually in the same product schema.
+- Every tenant-owned business table includes the chosen tenant key.
+- Tenant-scoped uniqueness includes the chosen tenant key.
+
+Tenant state is product access posture. Subscription state is billing lifecycle. They are related but separate.
+
+Tenant states:
+- `active`
+- `soft_locked`
+- `suspended`
+- `archived`
+- `deleted_pending`
+
+Subscription states:
+- `trialing`
+- `active`
+- `past_due`
+- `unpaid`
+- `expired`
+- `cancelled`
+
+Rules:
+- Soft lock is an enforced access posture, not merely a subscription status.
+- Subscription issues may create or clear soft locks, but platform operators may also create manual soft locks.
+- Suspension is stronger than soft lock and is used for abuse, security, compliance, or explicit operator action.
+- Archived and deleted-pending tenants cannot be reactivated without a documented restore path.
+
+Soft lock default behavior is read-mostly and write-restricted.
+
+Allowed during soft lock:
+- login
+- view current tenant status
+- view billing, subscription, invoices, usage, and entitlements
+- update payment method
+- pay invoice or resume subscription
+- open approved billing portal or support contact flows
+- export critical data if product policy allows
+
+Blocked during soft lock:
+- creating product resources
+- inviting tenant users
+- using paid features
+- public API writes
+- background jobs that consume paid quota
+- webhook deliveries that represent paid usage
+- plan changes except approved recovery flows
+
+Stable error codes:
+- `TENANT_SOFT_LOCKED`
+- `SUBSCRIPTION_PAST_DUE`
+- `SUBSCRIPTION_UNPAID`
+- `SUBSCRIPTION_EXPIRED`
+- `PLAN_LIMIT_EXCEEDED`
+
+Tenant self-service API surface:
+
+```text
+GET    /api/v1/tenants/current
+PATCH  /api/v1/tenants/current
+GET    /api/v1/tenants/current/members
+POST   /api/v1/tenants/current/invitations
+PATCH  /api/v1/tenants/current/members/:memberId/role
+DELETE /api/v1/tenants/current/members/:memberId
+GET    /api/v1/tenants/current/subscription
+GET    /api/v1/tenants/current/entitlements
+POST   /api/v1/tenants/current/billing-portal-session
+```
+
+Platform operator API surface:
+
+```text
+GET    /api/v1/admin/tenants
+GET    /api/v1/admin/tenants/:tenantId
+GET    /api/v1/admin/tenants/:tenantId/subscription
+POST   /api/v1/admin/tenants/:tenantId/soft-lock
+DELETE /api/v1/admin/tenants/:tenantId/soft-lock
+POST   /api/v1/admin/tenants/:tenantId/suspend
+POST   /api/v1/admin/tenants/:tenantId/restore
+```
+
+Soft lock and entitlement enforcement happens in:
+- HTTP route guards for protected request entry
+- service methods before writes and paid actions
+- worker enqueue paths
+- worker execution paths before paid side effects
+- public API client access checks
+- outbound webhook delivery jobs
+- rate limit policies where plans affect quotas
+
+Mandatory audit events:
+- tenant created, updated, archived, restored, suspended, or deleted-pending
+- tenant member invited, removed, deactivated, or role-changed
+- tenant ownership transferred
+- subscription plan changed
+- subscription status changed
+- entitlement changed
+- soft lock applied or cleared
+- operator override applied or expired
+- billing recovery action started or completed
+
+Baseline module layout:
+
+```text
+controllers/
+  tenant.controller.ts
+  tenant-user.controller.ts
+  subscription.controller.ts
+  entitlement.controller.ts
+  operator-tenant.controller.ts
+services/
+  tenant.service.ts
+  tenant-user.service.ts
+  subscription.service.ts
+  entitlement.service.ts
+  soft-lock.service.ts
+  operator-tenant.service.ts
+```
+
+### 20.11 Validation
 
 Elysia's TypeBox-based schema validation handles request and response boundary validation. Zod handles business/domain validation inside services.
 
@@ -450,7 +624,7 @@ Rules:
 - Frontend validation is UX only; backend validation is authoritative.
 - Validation errors are mapped into the standard error envelope.
 
-### 20.11 Database: PostgreSQL + Drizzle + PgBouncer
+### 20.12 Database: PostgreSQL + Drizzle + PgBouncer
 
 PostgreSQL is the mandatory relational database. Drizzle is the mandatory ORM/query builder.
 
@@ -481,7 +655,7 @@ const sql = new SQL({
 export const db = drizzle(sql)
 ```
 
-#### 20.11.1 Migrations, Seeds, And Data Changes
+#### 20.12.1 Migrations, Seeds, And Data Changes
 
 Database changes use Drizzle migrations only.
 
@@ -512,7 +686,7 @@ Seed rules:
 - Staging seed data may mimic production scale and shape but must be synthetic or anonymized.
 - Seeds are for setup and test repeatability, not hidden migrations.
 
-### 20.12 Rate Limiting
+### 20.13 Rate Limiting
 
 Redis-backed rate limiting is mandatory.
 
@@ -716,7 +890,7 @@ Forbidden labels:
 - raw URL path
 - email or phone number
 
-### 20.13 Idempotency
+### 20.14 Idempotency
 
 Idempotency is mandatory for unsafe writes and external/public API side effects.
 
@@ -727,7 +901,7 @@ Rules:
 - Same key plus different payload returns a conflict.
 - Required for payments, orders, imports, media completion, external writes, webhook processing, and irreversible actions.
 
-### 20.14 Pagination, Filtering, And Sorting
+### 20.15 Pagination, Filtering, And Sorting
 
 Rules:
 - All list endpoints are paginated.
@@ -738,7 +912,7 @@ Rules:
 - Filters, search, sort, page, and page size must be represented in OpenAPI.
 - Response `meta` uses consistent names so dashboard TanStack Query/Table integrations remain predictable.
 
-### 20.15 Redis And BullMQ
+### 20.16 Redis And BullMQ
 
 Redis and BullMQ are mandatory from day one.
 
@@ -781,7 +955,7 @@ flowchart TD
     DLQ --> Alert[Alert + Operational Review]
 ```
 
-#### 20.15.1 Caching Strategy
+#### 20.16.1 Caching Strategy
 
 Redis caching is an optimization layer. PostgreSQL remains the source of truth for durable business data.
 
@@ -828,7 +1002,7 @@ Stampede protection:
 - Serve stale data only for read-only responses where the product accepts staleness.
 - Never hold a Redis lock across network calls unless the timeout is strict and documented.
 
-#### 20.15.2 Queue Handling, Retries, And Backoff
+#### 20.16.2 Queue Handling, Retries, And Backoff
 
 Queues are product infrastructure, not a dumping ground for arbitrary async code. Every queue and job type must have explicit ownership, retry behavior, timeout behavior, and failure handling.
 
@@ -932,7 +1106,7 @@ export const mediaWorker = new Worker(
 )
 ```
 
-### 20.16 Realtime And Push Notifications
+### 20.17 Realtime And Push Notifications
 
 Separate in-app realtime from push notifications.
 
@@ -951,7 +1125,7 @@ Rules:
 - Store notification records and delivery attempts in PostgreSQL.
 - Delivery failures emit telemetry and alerts.
 
-### 20.17 Media Uploads And Object Storage
+### 20.18 Media Uploads And Object Storage
 
 Never store blob/file bytes in PostgreSQL.
 
@@ -1037,7 +1211,7 @@ sequenceDiagram
     Client->>S3: Download file directly
 ```
 
-### 20.18 Webhooks
+### 20.19 Webhooks
 
 Inbound provider webhooks follow a receive-fast, process-async pattern.
 
@@ -1102,7 +1276,7 @@ flowchart TD
     Failed --> Replay[Allow Manual Replay]
 ```
 
-### 20.19 Telemetry And Observability
+### 20.20 Telemetry And Observability
 
 OpenTelemetry is mandatory for API and worker processes.
 
@@ -1182,7 +1356,7 @@ Banned metric labels:
 - `resource_id`
 - raw path values containing IDs
 
-### 20.20 Logging: Pino
+### 20.21 Logging: Pino
 
 Pino is the mandatory logger.
 
@@ -1194,7 +1368,7 @@ Rules:
 - Every request log includes `request_id`, `trace_id`, `method`, `route`, `status`, and `duration_ms`.
 - Worker logs include `job_id`, `job_name`, `attempt`, `trace_id`, and safe error codes.
 
-### 20.21 Audit Log
+### 20.22 Audit Log
 
 Audit logs are mandatory and live in PostgreSQL. They are product/security records, not disposable telemetry.
 
@@ -1227,7 +1401,7 @@ Mandatory audit events:
 - billing/payment-sensitive actions
 - public API auth failures and rate limit denials
 
-### 20.22 Health, Readiness, Metrics, And Admin Endpoints
+### 20.23 Health, Readiness, Metrics, And Admin Endpoints
 
 Every backend exposes:
 
@@ -1245,7 +1419,7 @@ Rules:
 - Health/readiness responses must not expose secrets, internal hostnames, image tags, dependency credentials, or detailed config.
 - `/ready` returns 503 during graceful shutdown.
 
-#### 20.22.1 Timeouts, Body Limits, And Abort Handling
+#### 20.23.1 Timeouts, Body Limits, And Abort Handling
 
 Every backend API must define explicit limits. Unbounded parsing, unbounded provider calls, and unbounded database waits are banned.
 
@@ -1276,7 +1450,7 @@ Rules:
 - Use pagination and server-side limits instead of allowing unbounded list/export requests.
 - Expensive exports must run as jobs and expose progress/status endpoints.
 
-### 20.23 Graceful Shutdown
+### 20.24 Graceful Shutdown
 
 Bun receives `SIGTERM` from Docker on container stop. API and worker processes must drain cleanly.
 
@@ -1478,7 +1652,7 @@ export async function closeQueues() {
 }
 ```
 
-### 20.24 Testing And CI
+### 20.25 Testing And CI
 
 Required backend checks:
 - `bun install --frozen-lockfile`
@@ -1496,6 +1670,13 @@ Required backend checks:
 - CORS and cookie/CSRF policy tests when browser clients use cookies
 - RBAC and scope authorization tests
 - multi-tenant isolation tests
+- tenant membership and role tests
+- tenant self-service admin RBAC tests
+- platform operator admin RBAC tests
+- subscription state transition tests
+- entitlement enforcement tests
+- soft lock allowed/blocked action tests
+- audit log tests for admin, billing, subscription, entitlement, and soft-lock changes
 - idempotency tests
 - rate limit policy tests
 - cache invalidation tests for permissions and high-risk cached reads
@@ -1505,7 +1686,7 @@ Required backend checks:
 - worker retry/failure tests
 - queue retry, backoff, DLQ, and manual replay tests
 
-### 20.25 Deployment: Docker Compose + Nginx On VPS
+### 20.26 Deployment: Docker Compose + Nginx On VPS
 
 Backend production deployments use Docker Compose on VPS behind Nginx.
 
@@ -1562,7 +1743,7 @@ flowchart TB
     Certbot[certbot] --> Nginx
 ```
 
-#### 20.25.1 Dockerfile Standard
+#### 20.26.1 Dockerfile Standard
 
 Backend projects use one Bun application image for both the API process and worker process. Docker Compose changes runtime behavior through the container command.
 
@@ -1651,7 +1832,7 @@ Image verification:
 - CI runs a smoke test for the worker command.
 - CI verifies the image starts without secrets baked into the image.
 
-### 20.26 Environment Variables
+### 20.27 Environment Variables
 
 `.env.example` is the source of truth for required runtime configuration.
 
@@ -1683,7 +1864,7 @@ Rules:
 - Every new env var is added to `.env.example`.
 - JWT private keys and refresh token secrets are secrets, not config.
 
-### 20.27 Backup, Retention, And Recovery
+### 20.28 Backup, Retention, And Recovery
 
 Rules:
 - PostgreSQL backups are mandatory.
@@ -1694,7 +1875,7 @@ Rules:
 - Telemetry retention is defined per environment.
 - Media deletion lifecycle must define soft delete, physical delete, and recovery windows.
 
-### 20.28 Standard Directory Layout
+### 20.29 Standard Directory Layout
 
 ```text
 src/
@@ -1702,12 +1883,23 @@ src/
   app.ts
   controllers/
     auth.controller.ts
+    tenant.controller.ts
+    tenant-user.controller.ts
+    subscription.controller.ts
+    entitlement.controller.ts
+    operator-tenant.controller.ts
     workspace.controller.ts
     health.controller.ts
     media.controller.ts
     webhook.controller.ts
   services/
     auth.service.ts
+    tenant.service.ts
+    tenant-user.service.ts
+    subscription.service.ts
+    entitlement.service.ts
+    soft-lock.service.ts
+    operator-tenant.service.ts
     rbac.service.ts
     workspace.service.ts
     media.service.ts
@@ -1758,7 +1950,7 @@ Rules:
 - `lib/` owns cross-cutting infrastructure and reusable adapters.
 - Generated OpenAPI client code does not live in the backend repo unless a project explicitly generates SDK artifacts.
 
-### 20.29 Anti-Patterns
+### 20.30 Anti-Patterns
 
 The following are banned:
 
@@ -1769,6 +1961,11 @@ The following are banned:
 | JWT authorization without RBAC/scope checks | JWT identity + workspace membership + RBAC/scopes + resource ownership |
 | Global roles without workspace context | Tenant-scoped memberships and roles |
 | Missing `workspace_id` filters on tenant-owned queries | Mandatory tenant-scoped service queries |
+| Dashboard-only tenant administration rules | Backend-owned tenant admin services and RBAC |
+| Treating subscription state as tenant access state | Separate subscription lifecycle from tenant access posture |
+| Soft lock only in frontend route guards | Backend guard, service, worker, public API, and webhook enforcement |
+| Operator tenant changes without audit reason | Operator RBAC plus mandatory audit log reason |
+| Mixing `tenant_id` and `workspace_id` inconsistently | One project-wide tenant key convention |
 | Returning raw Elysia/Zod/SQL errors | Standard error envelope with safe codes |
 | ESLint as the default backend linter | Oxlint |
 | Prettier or Biome as the default backend formatter | Oxfmt |
