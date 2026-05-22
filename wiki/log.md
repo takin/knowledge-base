@@ -40,3 +40,20 @@
 - Replaced the root wiki index with a concise domain map.
 - Added domain-level indexes for product, engineering, science, business, and design.
 - Added topic-level indexes for product TikTok, product WhatsApp, product Xendit, and engineering WhatsApp.
+
+## [2026-05-22] ingest | Tech Stacks
+- Reorganized raw tech stack draft into stack-specific source files under `raw/engineering/tech-stacks/`.
+- Created generic, company-neutral Tech Stacks wiki articles under `wiki/engineering/tech-stacks/`.
+- Updated Engineering index with the Tech Stacks topic.
+
+## [2026-05-22] maintenance | Tech Stacks frontend hardening
+- Made PWA support optional by default and conditional on product requirements.
+- Promoted CSP nonce handling to an app-level TanStack Start requirement.
+- Made Nginx the mandatory outside-facing Docker gateway; app containers must use internal `expose:` only.
+
+## [2026-05-22] ingest | Web Stack: React + TanStack Start
+- Updated: Web Stack article with frontend-owned scope, direct Nitro Docker runtime command, standard project structure, route/page separation, `getRouteApi` page access, current URL state guidance, RLS pooled-connection warnings, and production observability rules.
+
+## [2026-05-22] ingest | Tech Stacks Overview
+- Updated: Tech Stacks index platform metadata for the TanStack Start stack.
+- Updated: Web Stack article metadata to reflect frontend-owned or fullstack scope.
