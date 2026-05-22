@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1314 nodes · 1288 edges · 133 communities (110 shown, 23 thin omitted)
+- 1314 nodes · 1288 edges · 132 communities (109 shown, 23 thin omitted)
 - Extraction: 93% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 83 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `48fc96f9`
+- Built from commit: `00fb8f38`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -128,7 +128,7 @@
 - [[_COMMUNITY_Community 110|Community 110]]
 - [[_COMMUNITY_Community 111|Community 111]]
 - [[_COMMUNITY_Community 112|Community 112]]
-- [[_COMMUNITY_Community 113|Community 113]]
+- [[_COMMUNITY_Community 114|Community 114]]
 - [[_COMMUNITY_Community 115|Community 115]]
 - [[_COMMUNITY_Community 116|Community 116]]
 - [[_COMMUNITY_Community 117|Community 117]]
@@ -140,12 +140,11 @@
 - [[_COMMUNITY_Community 123|Community 123]]
 - [[_COMMUNITY_Community 124|Community 124]]
 - [[_COMMUNITY_Community 125|Community 125]]
-- [[_COMMUNITY_Community 126|Community 126]]
+- [[_COMMUNITY_Community 127|Community 127]]
 - [[_COMMUNITY_Community 128|Community 128]]
 - [[_COMMUNITY_Community 129|Community 129]]
 - [[_COMMUNITY_Community 130|Community 130]]
 - [[_COMMUNITY_Community 131|Community 131]]
-- [[_COMMUNITY_Community 132|Community 132]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `20. Backend API Stack` - 29 edges
@@ -164,12 +163,12 @@
   raw/whatsapp/pricing/attachments/User-Initiated-2.jpg → raw/whatsapp/2026-05-20-service-messages--developer-documentation.md
 - `Tokopedia and TikTok Shop affiliate FAQ comparison` --conceptually_related_to--> `Video Pendek / Short videos`  [INFERRED]
   raw/tiktok/shop/attachments/6542db9b2412402190ba7b5e38af88a7~tplv-nk3i2mqmvs-image.png → raw/tiktok/shop/attachments/6542db9b2412402190ba7b5e38af88a7~tplv-nk3i2mqmvs-image.png; affiliate dashboard images
-- `Template vs Non-Template Billability Table` --references--> `WhatsApp Customer Service Window`  [EXTRACTED]
-  raw/whatsapp/pricing/attachments/571069280_1541820816822527_6328052606712176022_n.png → raw/whatsapp/pricing/2026-05-20-pricing-on-the-whats-app-business-platform.md
 - `Xendit Placeholder SVG` --conceptually_related_to--> `Xendit Transaction Pricing`  [AMBIGUOUS]
   raw/xendit/attachments/Image.svg → raw/xendit/2026-05-20-biaya.md
 - `Program Trafik Eksternal Benefits Image` --conceptually_related_to--> `Program Trafik Eksternal`  [EXTRACTED]
   raw/tiktok/affiliate/attachments/81161bf671814e0cbd32bad93fdeb321~tplv-nk3i2mqmvs-image.png → raw/tiktok/affiliate/2026-05-20-panduan-program-trafik-eksternal-untuk-penjual.md
+- `WhatsApp Service Messages` --conceptually_related_to--> `WhatsApp Business Platform`  [EXTRACTED]
+  wiki/engineering/whatsapp/whatsapp-service-messages.md → raw/whatsapp/2026-05-20-service-messages--developer-documentation.md
 
 ## Hyperedges (group relationships)
 - **Affiliate Collaboration Formats** — apa_itu_afiliasi_affiliate_platform, apa_itu_afiliasi_kolaborasi_terbuka, apa_itu_afiliasi_kolaborasi_bertarget [EXTRACTED 0.95]
@@ -203,7 +202,7 @@
 - **QRIS Cashless Payment System** — xendit_qris_xendit_qris, xendit_qris_qris_national_standard, xendit_qris_bank_indonesia, xendit_qris_indonesian_payment_system_association, xendit_qris_qris_payment_flow [EXTRACTED 1.00]
 - **xenPlatform Multi-Account Payment Model** — xendit_xenplatform_xendit_xenplatform, xendit_xenplatform_master_account, xendit_xenplatform_sub_account, xendit_xenplatform_account_id, xendit_xenplatform_platform_payment_flow, xendit_xenplatform_managed_sub_accounts, xendit_xenplatform_owned_sub_accounts [EXTRACTED 1.00]
 
-## Communities (133 total, 23 thin omitted)
+## Communities (132 total, 23 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.06
@@ -330,16 +329,16 @@ Cohesion: 0.14
 Nodes (13): Apa itu Komisi Platform?, Bagaimana perhitungan Komisi Platform berdasarkan kategori produk?, Berapa biaya Komisi Platform?, Biaya Layanan Pre-order, Contoh Penghitungan, Diskon Komisi Gabungan untuk GMV Max dan Growth Xtra, Diskon Komisi GMV Max, Diskon Komisi Platform (+5 more)
 
 ### Community 31 - "Community 31"
+Cohesion: 0.14
+Nodes (14): 21.2 entrypoint.sh Contract, 21.3 Docker Compose Contract, 21.4 Nginx Static SPA Contract, 21.5 Let's Encrypt Certificate Lifecycle, 21. Deployment: Docker Compose + Nginx Static Runtime, code:sh (#!/bin/sh), code:yaml (services:), code:nginx (server {) (+6 more)
+
+### Community 32 - "Community 32"
 Cohesion: 0.16
 Nodes (14): Berat yang Dapat Ditagih, Biaya Layanan Logistik Berlaku Mulai 1 Mei 2026, Settlement Breakdown Estimated Package Weight Image, Logistics Service Fee Excel Cover Image, Biaya Layanan Logistik, Rute Pengiriman, Settlement Breakdown Logistics Service Fee Image, Alamat Penjemputan LSP (+6 more)
 
-### Community 32 - "Community 32"
+### Community 33 - "Community 33"
 Cohesion: 0.14
 Nodes (14): appointment_reschedule_buttons, contact_card_message, document_message, interactive_button_message, link_preview_message, location_message, media_message, meta_quest_3_link (+6 more)
-
-### Community 33 - "Community 33"
-Cohesion: 0.2
-Nodes (14): Service Messages | Developer Documentation, WhatsApp Billing Webhooks, WhatsApp Business Platform, WhatsApp Business Platform Pricing, WhatsApp Customer Service Window, WhatsApp Flow Response Handling, Interactive Flow Message, WhatsApp Message Delivery Webhooks (+6 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.17
@@ -358,8 +357,8 @@ Cohesion: 0.17
 Nodes (11): Create new flow from a template, Debug flow using the interactive preview, Flows JSON Template, Getting Started, Intro and Overview, Monitoring, Publishing, Receiving flow response (+3 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.17
-Nodes (12): India Authentication Volume Tier Illustration, Utility Boarding Pass Message Example, Business Portfolio Level Aggregation, Country Calling Code Rate Mapping, Indonesia Utility Rate IDR356.6500, Indonesia Utility Volume Tier Table, WhatsApp Market-Category Pair, WhatsApp Pricing Analytics (+4 more)
+Cohesion: 0.2
+Nodes (12): WhatsApp Billing Webhooks, WhatsApp Flow Lifecycle, WhatsApp Flow Operational Constraints, WhatsApp Flow Response Handling, WhatsApp Flows, WhatsApp Flows Core Model, Interactive Flow Message, WhatsApp Message Delivery Webhooks (+4 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.18
@@ -375,103 +374,103 @@ Nodes (10): Memblokir Pesan, Memfilter Pesan, Mengakses Pesan Kreator di Desktop
 
 ### Community 42 - "Community 42"
 Cohesion: 0.18
-Nodes (11): 21.2 entrypoint.sh Contract, 21.3 Docker Compose Contract, 21.5 Let's Encrypt Certificate Lifecycle, 21. Deployment: Docker Compose + Nginx Static Runtime, code:sh (#!/bin/sh), code:yaml (services:), code:text (infra/scripts/renew-certs.sh), code:bash (#!/usr/bin/env bash) (+3 more)
+Nodes (10): Collect Purchase Intent, Get Insurance Quote, Get Leads for Pre-Approved Loans, Get Started, Guides, Learn About WhatsApp Flows, Personalised Offer, Playground (+2 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.18
-Nodes (10): Collect Purchase Intent, Get Insurance Quote, Get Leads for Pre-Approved Loans, Get Started, Guides, Learn About WhatsApp Flows, Personalised Offer, Playground (+2 more)
+Nodes (11): Authentication Verification Code Message Example, India Authentication Volume Tier Illustration, WhatsApp Authentication Template Messages, Business Portfolio Level Aggregation, Country Calling Code Rate Mapping, Indonesia Utility Volume Tier Table, WhatsApp Market-Category Pair, WhatsApp Pricing Analytics (+3 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.2
-Nodes (9): Automatic Sample Approval, Combining Sample Shipments, Creator Content Requirement, Multi-SKU Sample Requests, Open Collaboration Samples, See Also, Shipping Free Samples, Targeted Collaboration Samples (+1 more)
+Nodes (11): WhatsApp Message Category Cards, Marketing Hiking Shoes Message Example, Template vs Non-Template Billability Table, Utility Boarding Pass Message Example, WhatsApp Customer Service Window, Delivered Template Message Charge, Indonesia Marketing Rate IDR586.3300, Indonesia Utility Rate IDR356.6500 (+3 more)
 
 ### Community 45 - "Community 45"
 Cohesion: 0.2
-Nodes (9): Calculation Basis, Chargeable Weight, code:text (Volumetric weight = Length * Width * Height (cm) / 6000), Finance Visibility, Refund Treatment, See Also, Service Availability, Standard Service Examples (+1 more)
+Nodes (9): Automatic Sample Approval, Combining Sample Shipments, Creator Content Requirement, Multi-SKU Sample Requests, Open Collaboration Samples, See Also, Shipping Free Samples, Targeted Collaboration Samples (+1 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.2
-Nodes (9): API Shape, code:text (POST /<WHATSAPP_BUSINESS_PHONE_NUMBER_ID>/messages), code:json ({), Customer Service Window, Message Quality Guidance, Operational Notes, See Also, Supported Message Types (+1 more)
+Nodes (9): Calculation Basis, Chargeable Weight, code:text (Volumetric weight = Length * Width * Height (cm) / 6000), Finance Visibility, Refund Treatment, See Also, Service Availability, Standard Service Examples (+1 more)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.2
-Nodes (9): Analitik Detail Kreator, Apa itu Program Trafik Eksternal?, Bagaimana Cara Bergabung di Program Trafik Eksternal?, Bagaimana cara keluar dari Program Trafik Eksternal?, Bagaimana Cara Kerja Program Trafik Eksternal?, Bagaimana Cara Melacak Data Program Trafik Eksternal?, Bagaimana Cara Melacak Pesanan Program Trafik Eksternal?, FAQ (+1 more)
+Nodes (9): API Shape, code:text (POST /<WHATSAPP_BUSINESS_PHONE_NUMBER_ID>/messages), code:json ({), Customer Service Window, Message Quality Guidance, Operational Notes, See Also, Supported Message Types (+1 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.2
-Nodes (10): black_friday_deals_flow, collect_purchase_intent, customer_personal_data, flow_form_fields, lead_generation_category, product_interest_selection, promotional_opt_in_checkbox, shop_icon_svg (+2 more)
+Nodes (9): Analitik Detail Kreator, Apa itu Program Trafik Eksternal?, Bagaimana Cara Bergabung di Program Trafik Eksternal?, Bagaimana cara keluar dari Program Trafik Eksternal?, Bagaimana Cara Kerja Program Trafik Eksternal?, Bagaimana Cara Melacak Data Program Trafik Eksternal?, Bagaimana Cara Melacak Pesanan Program Trafik Eksternal?, FAQ (+1 more)
 
 ### Community 49 - "Community 49"
-Cohesion: 0.22
-Nodes (8): Chargeable Weight, code:text (Volumetric weight (kg) = Length * Width * Height (cm) / 6000), Merging Orders, Pickup Address Rule, See Also, Seller vs LSP Measurement, Splitting Orders, TikTok Shop Shipping Weight and Package Rules
+Cohesion: 0.2
+Nodes (10): black_friday_deals_flow, collect_purchase_intent, customer_personal_data, flow_form_fields, lead_generation_category, product_interest_selection, promotional_opt_in_checkbox, shop_icon_svg (+2 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.22
-Nodes (8): Calculation Basis, Category Rates From Source Article, code:text (Dynamic Commission Fee = (Item Price - Seller Discount) * Dy), Rate Change From 18 May 2026, Refund Rules, See Also, TikTok Shop Dynamic Commission Fee, Worked Example
+Nodes (8): Chargeable Weight, code:text (Volumetric weight (kg) = Length * Width * Height (cm) / 6000), Merging Orders, Pickup Address Rule, See Also, Seller vs LSP Measurement, Splitting Orders, TikTok Shop Shipping Weight and Package Rules
 
 ### Community 51 - "Community 51"
 Cohesion: 0.22
-Nodes (8): Billing And Webhooks, Category Intent, Free Messaging Cases, Indonesia Rates Captured, Pricing Basis, See Also, Utility Volume Tiers, WhatsApp Business Platform Pricing
+Nodes (8): Calculation Basis, Category Rates From Source Article, code:text (Dynamic Commission Fee = (Item Price - Seller Discount) * Dy), Rate Change From 18 May 2026, Refund Rules, See Also, TikTok Shop Dynamic Commission Fee, Worked Example
 
 ### Community 52 - "Community 52"
 Cohesion: 0.22
-Nodes (8): 23.1 All TypeScript projects (every stack), 23.2 Frontend Web Projects, 23.3 Mobile (React Native / Expo), 23.4 Backend API (Elysia + Bun), 23. Required Agent Skills, Agent Skills: TypeScript Product Development, Standard, Summary
+Nodes (8): Billing And Webhooks, Category Intent, Free Messaging Cases, Indonesia Rates Captured, Pricing Basis, See Also, Utility Volume Tiers, WhatsApp Business Platform Pricing
 
 ### Community 53 - "Community 53"
 Cohesion: 0.22
-Nodes (8): Cara Memisahkan Pesanan, FAQ, Kriteria Memisahkan Pesanan, Manfaat Memisahkan Pesanan, Memantau Status Pengiriman, Memproses Pesanan yang Dipisah, Mengubah Pesanan yang Dipisah, Meninjau Pesanan yang Dipisah
+Nodes (8): 23.1 All TypeScript projects (every stack), 23.2 Frontend Web Projects, 23.3 Mobile (React Native / Expo), 23.4 Backend API (Elysia + Bun), 23. Required Agent Skills, Agent Skills: TypeScript Product Development, Standard, Summary
 
 ### Community 54 - "Community 54"
 Cohesion: 0.22
-Nodes (8): Bisnis yang menggunakan platform kami dikenai biaya per pesan untuk setiap pesan yang kami sampaikan kepada pengguna, Harga per pesan memberdayakan Anda dalam menciptakan pengalaman pelanggan yang lebih baik dan berinteraksi lebih baik dengan audiens., Jelajahi setiap kategori pesan untuk memahami cara menggunakannya di seluruh perjalanan pelanggan Anda., Kesederhanaan yang Anda perlukan untuk terhubung dalam skala besar, menciptakan pengalaman pelanggan yang lebih baik, dan berinteraksi lebih baik dengan pemirsa., Pahami tagihan yang kami kenakan, Percepat bisnis Anda, Tarif pesan, Tingkatan volume untuk pesan utilitas dan autentikasi
+Nodes (8): Cara Memisahkan Pesanan, FAQ, Kriteria Memisahkan Pesanan, Manfaat Memisahkan Pesanan, Memantau Status Pengiriman, Memproses Pesanan yang Dipisah, Mengubah Pesanan yang Dipisah, Meninjau Pesanan yang Dipisah
 
 ### Community 55 - "Community 55"
+Cohesion: 0.22
+Nodes (8): Bisnis yang menggunakan platform kami dikenai biaya per pesan untuk setiap pesan yang kami sampaikan kepada pengguna, Harga per pesan memberdayakan Anda dalam menciptakan pengalaman pelanggan yang lebih baik dan berinteraksi lebih baik dengan audiens., Jelajahi setiap kategori pesan untuk memahami cara menggunakannya di seluruh perjalanan pelanggan Anda., Kesederhanaan yang Anda perlukan untuk terhubung dalam skala besar, menciptakan pengalaman pelanggan yang lebih baik, dan berinteraksi lebih baik dengan pemirsa., Pahami tagihan yang kami kenakan, Percepat bisnis Anda, Tarif pesan, Tingkatan volume untuk pesan utilitas dan autentikasi
+
+### Community 56 - "Community 56"
 Cohesion: 0.28
 Nodes (9): Batas Maksimal Penarikan Dana, Batas Minimal Penarikan Dana, Cara Menarik Dana Dari Saldo Akun Penjual Document, Penarikan Dana Manual, Penarikan Dana Otomatis, Kata Sandi Penarikan Dana, Rekening Bank, Saldo Akun Penjual (+1 more)
 
-### Community 56 - "Community 56"
+### Community 57 - "Community 57"
 Cohesion: 0.25
 Nodes (7): Business Domain, Design Domain, Domains, Engineering Domain, Knowledge Base Index, Product Domain, Reorganized Wiki Taxonomy
 
-### Community 57 - "Community 57"
+### Community 58 - "Community 58"
 Cohesion: 0.25
 Nodes (7): E-Wallet Pricing Notes, Payment Acceptance Fees, Payment Links And Subscriptions, See Also, Sending Money And Refund Fees, Xendit Indonesia Pricing, xenPlatform Public Fees
 
-### Community 58 - "Community 58"
+### Community 59 - "Community 59"
 Cohesion: 0.25
 Nodes (7): Charging Rule, code:text (Order Processing Fee = Rp1,250 per successfully delivered or), Effective Date and Amount, New Seller Waiver, Refund Rules, See Also, TikTok Shop Order Processing Fee
 
-### Community 59 - "Community 59"
+### Community 60 - "Community 60"
 Cohesion: 0.25
 Nodes (7): Affiliate Tax Responsibility, PPh 23 and PPh 26, Reimbursement for Withheld Tax, See Also, Tax Invoices, TikTok Shop Tax FAQ, VAT / PPN
 
-### Community 60 - "Community 60"
+### Community 61 - "Community 61"
 Cohesion: 0.25
 Nodes (7): Build And Test Workflow, Collect Purchase Interest Pattern, Core Model, Operational Constraints, See Also, Sending And Response Handling, WhatsApp Flows
 
-### Community 61 - "Community 61"
+### Community 62 - "Community 62"
 Cohesion: 0.25
 Nodes (7): Apa itu Berat yang Ditagihkan?, Berat Sebenarnya:, Berat Volumetrik:, Definisi Berat:, FAQ, Manfaat Menghitung Berat yang Ditagihkan secara Akurat, Menghitung Berat yang Ditagihkan
 
-### Community 62 - "Community 62"
+### Community 63 - "Community 63"
 Cohesion: 0.25
 Nodes (7): Cara Menggabungkan Pesanan, Manfaat Menggabungkan Pesanan, Memproses Pesanan Gabungan, Menangani Pengembalian Barang & Dana, Meninjau Pesanan Gabungan, Pembatalan Pesanan, Syarat Menggabungkan Pesanan
 
-### Community 63 - "Community 63"
+### Community 64 - "Community 64"
 Cohesion: 0.25
 Nodes (7): Cara Menggunakan Afiliasi Platform, FAQ, Kolaborasi Bertarget, Kolaborasi Bertarget vs. Kolaborasi Terbuka, Kolaborasi Terbuka, Manfaat Menggunakan Afiliasi Platform, Memulai Afiliasi Platform
 
-### Community 64 - "Community 64"
+### Community 65 - "Community 65"
 Cohesion: 0.25
 Nodes (8): 20.24.1 Dockerfile Standard, 20.24 Deployment: Docker Compose + Nginx On VPS, code:text (nginx), code:text (minio), code:mermaid (flowchart TB), code:dockerfile (FROM oven/bun:<pinned-version> AS deps), code:yaml (services:), code:text (.env)
 
-### Community 65 - "Community 65"
-Cohesion: 0.25
-Nodes (8): flow_builder_ui, flow_draft_state, flow_published_state, interactive_preview, navigate_action, whatsapp_business_messaging_policy, whatsapp_commerce_policy, whatsapp_terms_of_service
-
 ### Community 66 - "Community 66"
 Cohesion: 0.25
-Nodes (8): Authentication Verification Code Message Example, WhatsApp Message Category Cards, Marketing Hiking Shoes Message Example, Template vs Non-Template Billability Table, WhatsApp Authentication Template Messages, Indonesia Marketing Rate IDR586.3300, WhatsApp Marketing Template Messages, WhatsApp Template Message Categories
+Nodes (8): flow_builder_ui, flow_draft_state, flow_published_state, interactive_preview, navigate_action, whatsapp_business_messaging_policy, whatsapp_commerce_policy, whatsapp_terms_of_service
 
 ### Community 67 - "Community 67"
 Cohesion: 0.29
@@ -531,7 +530,7 @@ Nodes (5): Product Index, TikTok Product Topic, WhatsApp Product Topic, Xendit P
 
 ### Community 81 - "Community 81"
 Cohesion: 0.33
-Nodes (6): WhatsApp Business Platform Pricing, Delivered Template Message Charge, WhatsApp Free Entry Point Window, WhatsApp Per-Message Pricing, WhatsApp Pricing Calendar, Status Messages Pricing Object
+Nodes (6): Service Messages | Developer Documentation, WhatsApp Business Platform, WhatsApp Business Platform Pricing, Per-Delivered-Template-Message Pricing, Pre-Approved Template Messages, WhatsApp Utility Volume Tiers
 
 ### Community 82 - "Community 82"
 Cohesion: 0.4
@@ -539,7 +538,7 @@ Nodes (4): FAQ, Menambahkan Produk yang Direkomendasikan, Saran Persentase Komis
 
 ### Community 83 - "Community 83"
 Cohesion: 0.4
-Nodes (5): 20.4.1 API Versioning And Deprecation, 20.4 API Design: REST + OpenAPI, code:bash (bun add @elysiajs/openapi), code:typescript (import { Elysia } from 'elysia'), code:mermaid (flowchart LR)
+Nodes (5): 20.22 Graceful Shutdown, code:env (SHUTDOWN_GRACE_MS=30000), code:typescript (import { Elysia } from 'elysia'), code:typescript (import { db } from '../lib/db'), code:typescript (import { Queue, Worker } from 'bullmq')
 
 ### Community 84 - "Community 84"
 Cohesion: 0.4
@@ -547,7 +546,7 @@ Nodes (5): 20.14.1 Caching Strategy, 20.14.2 Queue Handling, Retries, And Backof
 
 ### Community 85 - "Community 85"
 Cohesion: 0.4
-Nodes (5): 20.22 Graceful Shutdown, code:env (SHUTDOWN_GRACE_MS=30000), code:typescript (import { Elysia } from 'elysia'), code:typescript (import { db } from '../lib/db'), code:typescript (import { Queue, Worker } from 'bullmq')
+Nodes (5): 20.4.1 API Versioning And Deprecation, 20.4 API Design: REST + OpenAPI, code:bash (bun add @elysiajs/openapi), code:typescript (import { Elysia } from 'elysia'), code:mermaid (flowchart LR)
 
 ### Community 86 - "Community 86"
 Cohesion: 0.4
@@ -555,7 +554,7 @@ Nodes (5): business_managed_flow_footer, flow_json, message_webhook, structured_
 
 ### Community 87 - "Community 87"
 Cohesion: 0.4
-Nodes (5): WhatsApp Flow Lifecycle, WhatsApp Flow Operational Constraints, WhatsApp Flows, WhatsApp Flows Core Model, Collect Purchase Interest Pattern
+Nodes (5): WhatsApp Business Platform Pricing, WhatsApp Free Entry Point Window, WhatsApp Per-Message Pricing, WhatsApp Pricing Calendar, Status Messages Pricing Object
 
 ### Community 88 - "Community 88"
 Cohesion: 0.5
@@ -583,11 +582,11 @@ Nodes (4): 20.16 Media Uploads And Object Storage, code:text (id), code:mermaid 
 
 ### Community 94 - "Community 94"
 Cohesion: 0.5
-Nodes (4): 20.6.1 CORS, Cookies, And CSRF, 20.6 Authentication: JWT-First With JOSE, code:json ({), code:json ({)
+Nodes (4): 20.5.1 Error Code Registry, 20.5 Response Envelope And Error Registry, code:json ({), code:json ({)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.5
-Nodes (4): 20.5.1 Error Code Registry, 20.5 Response Envelope And Error Registry, code:json ({), code:json ({)
+Nodes (4): 20.6.1 CORS, Cookies, And CSRF, 20.6 Authentication: JWT-First With JOSE, code:json ({), code:json ({)
 
 ### Community 96 - "Community 96"
 Cohesion: 0.5
@@ -609,31 +608,27 @@ Nodes (3): 21.1 Dockerfile Contract, code:dockerfile (FROM oven/bun:<pinned-vers
 Cohesion: 0.67
 Nodes (3): 9. Routing: TanStack Router, code:text (src/routes/dashboard/users/index.tsx), code:text (src/routes/dashboard.users.index.tsx)
 
-### Community 105 - "Community 105"
-Cohesion: 0.67
-Nodes (3): 21.4 Nginx Static SPA Contract, code:nginx (server {), code:nginx (server {)
-
 ### Community 106 - "Community 106"
-Cohesion: 0.67
-Nodes (3): 20.17 Webhooks, code:mermaid (flowchart TD), code:mermaid (flowchart TD)
-
-### Community 108 - "Community 108"
 Cohesion: 0.67
 Nodes (3): 20.10.1 Migrations, Seeds, And Data Changes, 20.10 Database: PostgreSQL + Drizzle + PgBouncer, code:typescript (import { SQL } from 'bun')
 
-### Community 110 - "Community 110"
+### Community 107 - "Community 107"
+Cohesion: 0.67
+Nodes (3): 20.17 Webhooks, code:mermaid (flowchart TD), code:mermaid (flowchart TD)
+
+### Community 109 - "Community 109"
 Cohesion: 1.0
 Nodes (3): Pesanan Afiliasi, Jumlah Pesanan Produk Afiliasi, Pesanan SKU
 
-### Community 111 - "Community 111"
+### Community 110 - "Community 110"
 Cohesion: 0.67
 Nodes (3): Excel cover icon, PowerPoint cover icon, Unextractable TikTok Shop PDF attachments
 
-### Community 112 - "Community 112"
+### Community 111 - "Community 111"
 Cohesion: 0.67
 Nodes (3): lucky_shrub, phone_numbers_account_tool, whatsapp_manager
 
-### Community 113 - "Community 113"
+### Community 112 - "Community 112"
 Cohesion: 0.67
 Nodes (3): ecoshop, secure_meta_managed_chat, spruce
 
@@ -651,7 +646,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Xendit Transaction Pricing` and `Xendit Placeholder SVG`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `20. Backend API Stack` connect `Community 15` to `Community 64`, `Community 73`, `Community 106`, `Community 107`, `Community 108`, `Community 124`, `Community 83`, `Community 84`, `Community 85`, `Community 123`, `Community 92`, `Community 93`, `Community 94`, `Community 95`?**
+- **Why does `20. Backend API Stack` connect `Community 15` to `Community 65`, `Community 105`, `Community 106`, `Community 73`, `Community 107`, `Community 83`, `Community 84`, `Community 85`, `Community 122`, `Community 123`, `Community 92`, `Community 93`, `Community 94`, `Community 95`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Why does `TikTok Product Index` connect `Community 0` to `Community 80`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
