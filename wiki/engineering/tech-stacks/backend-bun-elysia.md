@@ -1,8 +1,8 @@
 # Backend Stack: Bun + Elysia
 
-Updated: 2026-05-22
+Updated: 2026-05-23
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
 Platform: Backend API
 Runtime: Bun
 Framework: Elysia
@@ -11,13 +11,40 @@ Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stac
 
 ## Summary
 
-This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, PostgreSQL/Drizzle/PgBouncer for durable data, Redis/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
+This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, PostgreSQL/Drizzle/PgBouncer for durable data, Redis/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
 
 The stack has two product profiles:
 - `internal-api` for dashboards, mobile apps, internal operators, and first-party machine clients.
 - `public-api` for external developers, partners, customer systems, and public machine clients.
 
 Both profiles expose REST JSON under `/api/v1`, generate OpenAPI 3.1, use JWT/JWKS/RBAC/scopes, require Redis and BullMQ from day one, and deploy behind Nginx with Docker Compose.
+
+## Runtime And Toolchain
+
+Backend API projects use Bun for installs, scripts, runtime, tests, and Docker builds. The JavaScript/TypeScript quality baseline is the Oxc toolchain family.
+
+Rules:
+- Use `oxc` as the baseline compiler/tooling family for JavaScript and TypeScript backend tooling.
+- Use `oxlint` as the default linter for Elysia backend projects.
+- Use `oxfmt` as the default formatter for Elysia backend projects.
+- `oxlint` does not replace TypeScript typechecking; `tsc --noEmit` remains mandatory.
+- ESLint is not the default backend linter. Add it only as a targeted exception when `oxlint` cannot cover a concrete risk.
+- Prettier and Biome are not the default backend formatters. Add them only with a documented project exception.
+- Oxfmt configuration must live in project formatter config, not ad hoc CI-only CLI flags.
+
+Required script contract:
+
+```json
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  }
+}
+```
 
 ## API Contract
 
@@ -300,7 +327,9 @@ Dockerfile standard:
 
 Required backend checks:
 - `bun install --frozen-lockfile`.
-- formatting, lint, and TypeScript typecheck.
+- Oxfmt formatting check: `oxfmt --check`.
+- Oxlint lint check: `oxlint`.
+- TypeScript typecheck: `tsc --noEmit`.
 - unit tests for services/utilities.
 - integration tests with PostgreSQL and Redis.
 - OpenAPI generation/drift check.
@@ -317,6 +346,9 @@ Required backend checks:
 | JWT auth without RBAC/scope/resource checks | JWT identity + workspace membership + RBAC/scopes + ownership |
 | Missing `workspace_id` filters | Tenant-scoped service queries |
 | Raw Elysia/Zod/SQL errors | Standard safe error envelope |
+| ESLint as the default backend linter | Oxlint |
+| Prettier or Biome as the default backend formatter | Oxfmt |
+| Treating Oxlint as TypeScript typecheck | `tsc --noEmit` |
 | Blob/base64 files in PostgreSQL | S3-compatible object storage + metadata/object keys |
 | Public-read buckets by default | Private bucket + presigned URLs |
 | Redis as durable source of truth | PostgreSQL source of truth, Redis cache/queue only |

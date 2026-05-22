@@ -3,7 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
-Updated: 2026-05-22
+Updated: 2026-05-23
 Status: Draft
 Scope: Standalone Bun + Elysia backend APIs, SaaS dashboards, mobile APIs, public APIs, webhooks, async workers, and self-hosted VPS deployments
 
@@ -67,7 +67,34 @@ Rules:
 - Redis and BullMQ are mandatory from day one.
 - Object storage is mandatory for media-capable products; never store file blobs in PostgreSQL.
 
-### 20.4 API Design: REST + OpenAPI
+### 20.4 Toolchain: Oxc, Oxlint, And Oxfmt
+
+Backend API projects use the Oxc toolchain family as the default JavaScript/TypeScript quality baseline.
+
+Rules:
+- Use `oxc` as the baseline compiler/tooling family for JavaScript and TypeScript backend tooling.
+- Use `oxlint` as the default linter for Elysia backend projects.
+- Use `oxfmt` as the default formatter for Elysia backend projects.
+- `oxlint` does not replace TypeScript typechecking; `tsc --noEmit` remains mandatory.
+- ESLint is not the default backend linter. Add it only as a targeted exception when `oxlint` cannot cover a concrete risk.
+- Prettier and Biome are not the default backend formatters. Add them only with a documented project exception.
+- Oxfmt configuration must live in project formatter config, not ad hoc CI-only CLI flags.
+
+Required script contract:
+
+```json
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
+  }
+}
+```
+
+### 20.5 API Design: REST + OpenAPI
 
 **Style:** RESTful JSON APIs with OpenAPI 3.1 generated automatically by Elysia's `@elysiajs/openapi` plugin.
 
@@ -134,7 +161,7 @@ flowchart LR
     Wrapper --> Features[Feature Code via TanStack Query]
 ```
 
-#### 20.4.1 API Versioning And Deprecation
+#### 20.5.1 API Versioning And Deprecation
 
 API versioning uses URL path prefixes only.
 
@@ -161,7 +188,7 @@ OpenAPI drift rules:
 - Internal API CI blocks dashboard/mobile client drift.
 - Every public API change updates docs, examples, and SDK generation inputs in the same PR.
 
-### 20.5 Response Envelope And Error Registry
+### 20.6 Response Envelope And Error Registry
 
 All API responses use a standard envelope.
 
@@ -202,7 +229,7 @@ Rules:
 - Every response includes or is correlated with `X-Request-ID`.
 - Internal errors are logged with `request_id`, `trace_id`, safe error metadata, and no PII.
 
-#### 20.5.1 Error Code Registry
+#### 20.6.1 Error Code Registry
 
 Error codes are part of the API contract. They must be stable, documented, and safe to expose.
 
@@ -233,7 +260,7 @@ Rules:
 - Use `details` for field-specific validation and structured retry hints.
 - Do not expose SQL constraint names, stack traces, provider raw errors, token parser internals, or authorization policy internals.
 
-### 20.6 Authentication: JWT-First With JOSE
+### 20.7 Authentication: JWT-First With JOSE
 
 JWT is the standard authentication mechanism for dashboard, mobile, machine-to-machine, and public API access.
 
@@ -251,7 +278,7 @@ Rules:
 - API keys are hashed at rest and shown only once at creation.
 - Do not store bearer access tokens in localStorage for dashboard apps unless a security ADR accepts the risk and mitigation.
 
-#### 20.6.1 CORS, Cookies, And CSRF
+#### 20.7.1 CORS, Cookies, And CSRF
 
 Backend APIs default to explicit origin allowlists and bearer-token authorization.
 
@@ -311,7 +338,7 @@ Recommended machine token claims:
 }
 ```
 
-### 20.7 JWK, JWKS, And Key Rotation
+### 20.8 JWK, JWKS, And Key Rotation
 
 All production JWT signing keys use JOSE-compatible JWK material and expose public verification keys through JWKS.
 
@@ -341,7 +368,7 @@ flowchart TD
     Accepted -- No --> Reject[Reject Token]
 ```
 
-### 20.8 Authorization: RBAC, Scopes, And Tenant Isolation
+### 20.9 Authorization: RBAC, Scopes, And Tenant Isolation
 
 RBAC is mandatory for all SaaS backend APIs.
 
@@ -413,7 +440,7 @@ flowchart TD
     DB --> Result[Return Tenant-Scoped Result]
 ```
 
-### 20.9 Validation
+### 20.10 Validation
 
 Elysia's TypeBox-based schema validation handles request and response boundary validation. Zod handles business/domain validation inside services.
 
@@ -423,7 +450,7 @@ Rules:
 - Frontend validation is UX only; backend validation is authoritative.
 - Validation errors are mapped into the standard error envelope.
 
-### 20.10 Database: PostgreSQL + Drizzle + PgBouncer
+### 20.11 Database: PostgreSQL + Drizzle + PgBouncer
 
 PostgreSQL is the mandatory relational database. Drizzle is the mandatory ORM/query builder.
 
@@ -454,7 +481,7 @@ const sql = new SQL({
 export const db = drizzle(sql)
 ```
 
-#### 20.10.1 Migrations, Seeds, And Data Changes
+#### 20.11.1 Migrations, Seeds, And Data Changes
 
 Database changes use Drizzle migrations only.
 
@@ -485,7 +512,7 @@ Seed rules:
 - Staging seed data may mimic production scale and shape but must be synthetic or anonymized.
 - Seeds are for setup and test repeatability, not hidden migrations.
 
-### 20.11 Rate Limiting
+### 20.12 Rate Limiting
 
 Redis-backed rate limiting is mandatory.
 
@@ -689,7 +716,7 @@ Forbidden labels:
 - raw URL path
 - email or phone number
 
-### 20.12 Idempotency
+### 20.13 Idempotency
 
 Idempotency is mandatory for unsafe writes and external/public API side effects.
 
@@ -700,7 +727,7 @@ Rules:
 - Same key plus different payload returns a conflict.
 - Required for payments, orders, imports, media completion, external writes, webhook processing, and irreversible actions.
 
-### 20.13 Pagination, Filtering, And Sorting
+### 20.14 Pagination, Filtering, And Sorting
 
 Rules:
 - All list endpoints are paginated.
@@ -711,7 +738,7 @@ Rules:
 - Filters, search, sort, page, and page size must be represented in OpenAPI.
 - Response `meta` uses consistent names so dashboard TanStack Query/Table integrations remain predictable.
 
-### 20.14 Redis And BullMQ
+### 20.15 Redis And BullMQ
 
 Redis and BullMQ are mandatory from day one.
 
@@ -754,7 +781,7 @@ flowchart TD
     DLQ --> Alert[Alert + Operational Review]
 ```
 
-#### 20.14.1 Caching Strategy
+#### 20.15.1 Caching Strategy
 
 Redis caching is an optimization layer. PostgreSQL remains the source of truth for durable business data.
 
@@ -801,7 +828,7 @@ Stampede protection:
 - Serve stale data only for read-only responses where the product accepts staleness.
 - Never hold a Redis lock across network calls unless the timeout is strict and documented.
 
-#### 20.14.2 Queue Handling, Retries, And Backoff
+#### 20.15.2 Queue Handling, Retries, And Backoff
 
 Queues are product infrastructure, not a dumping ground for arbitrary async code. Every queue and job type must have explicit ownership, retry behavior, timeout behavior, and failure handling.
 
@@ -905,7 +932,7 @@ export const mediaWorker = new Worker(
 )
 ```
 
-### 20.15 Realtime And Push Notifications
+### 20.16 Realtime And Push Notifications
 
 Separate in-app realtime from push notifications.
 
@@ -924,7 +951,7 @@ Rules:
 - Store notification records and delivery attempts in PostgreSQL.
 - Delivery failures emit telemetry and alerts.
 
-### 20.16 Media Uploads And Object Storage
+### 20.17 Media Uploads And Object Storage
 
 Never store blob/file bytes in PostgreSQL.
 
@@ -1010,7 +1037,7 @@ sequenceDiagram
     Client->>S3: Download file directly
 ```
 
-### 20.17 Webhooks
+### 20.18 Webhooks
 
 Inbound provider webhooks follow a receive-fast, process-async pattern.
 
@@ -1075,7 +1102,7 @@ flowchart TD
     Failed --> Replay[Allow Manual Replay]
 ```
 
-### 20.18 Telemetry And Observability
+### 20.19 Telemetry And Observability
 
 OpenTelemetry is mandatory for API and worker processes.
 
@@ -1155,7 +1182,7 @@ Banned metric labels:
 - `resource_id`
 - raw path values containing IDs
 
-### 20.19 Logging: Pino
+### 20.20 Logging: Pino
 
 Pino is the mandatory logger.
 
@@ -1167,7 +1194,7 @@ Rules:
 - Every request log includes `request_id`, `trace_id`, `method`, `route`, `status`, and `duration_ms`.
 - Worker logs include `job_id`, `job_name`, `attempt`, `trace_id`, and safe error codes.
 
-### 20.20 Audit Log
+### 20.21 Audit Log
 
 Audit logs are mandatory and live in PostgreSQL. They are product/security records, not disposable telemetry.
 
@@ -1200,7 +1227,7 @@ Mandatory audit events:
 - billing/payment-sensitive actions
 - public API auth failures and rate limit denials
 
-### 20.21 Health, Readiness, Metrics, And Admin Endpoints
+### 20.22 Health, Readiness, Metrics, And Admin Endpoints
 
 Every backend exposes:
 
@@ -1218,7 +1245,7 @@ Rules:
 - Health/readiness responses must not expose secrets, internal hostnames, image tags, dependency credentials, or detailed config.
 - `/ready` returns 503 during graceful shutdown.
 
-#### 20.21.1 Timeouts, Body Limits, And Abort Handling
+#### 20.22.1 Timeouts, Body Limits, And Abort Handling
 
 Every backend API must define explicit limits. Unbounded parsing, unbounded provider calls, and unbounded database waits are banned.
 
@@ -1249,7 +1276,7 @@ Rules:
 - Use pagination and server-side limits instead of allowing unbounded list/export requests.
 - Expensive exports must run as jobs and expose progress/status endpoints.
 
-### 20.22 Graceful Shutdown
+### 20.23 Graceful Shutdown
 
 Bun receives `SIGTERM` from Docker on container stop. API and worker processes must drain cleanly.
 
@@ -1451,13 +1478,13 @@ export async function closeQueues() {
 }
 ```
 
-### 20.23 Testing And CI
+### 20.24 Testing And CI
 
 Required backend checks:
 - `bun install --frozen-lockfile`
-- formatting check
-- lint
-- TypeScript typecheck
+- Oxfmt formatting check: `oxfmt --check`
+- Oxlint lint check: `oxlint`
+- TypeScript typecheck: `tsc --noEmit`
 - unit tests for services and pure utilities
 - integration tests with PostgreSQL and Redis
 - OpenAPI generation/drift check
@@ -1478,7 +1505,7 @@ Required backend checks:
 - worker retry/failure tests
 - queue retry, backoff, DLQ, and manual replay tests
 
-### 20.24 Deployment: Docker Compose + Nginx On VPS
+### 20.25 Deployment: Docker Compose + Nginx On VPS
 
 Backend production deployments use Docker Compose on VPS behind Nginx.
 
@@ -1535,7 +1562,7 @@ flowchart TB
     Certbot[certbot] --> Nginx
 ```
 
-#### 20.24.1 Dockerfile Standard
+#### 20.25.1 Dockerfile Standard
 
 Backend projects use one Bun application image for both the API process and worker process. Docker Compose changes runtime behavior through the container command.
 
@@ -1624,7 +1651,7 @@ Image verification:
 - CI runs a smoke test for the worker command.
 - CI verifies the image starts without secrets baked into the image.
 
-### 20.25 Environment Variables
+### 20.26 Environment Variables
 
 `.env.example` is the source of truth for required runtime configuration.
 
@@ -1656,7 +1683,7 @@ Rules:
 - Every new env var is added to `.env.example`.
 - JWT private keys and refresh token secrets are secrets, not config.
 
-### 20.26 Backup, Retention, And Recovery
+### 20.27 Backup, Retention, And Recovery
 
 Rules:
 - PostgreSQL backups are mandatory.
@@ -1667,7 +1694,7 @@ Rules:
 - Telemetry retention is defined per environment.
 - Media deletion lifecycle must define soft delete, physical delete, and recovery windows.
 
-### 20.27 Standard Directory Layout
+### 20.28 Standard Directory Layout
 
 ```text
 src/
@@ -1731,7 +1758,7 @@ Rules:
 - `lib/` owns cross-cutting infrastructure and reusable adapters.
 - Generated OpenAPI client code does not live in the backend repo unless a project explicitly generates SDK artifacts.
 
-### 20.28 Anti-Patterns
+### 20.29 Anti-Patterns
 
 The following are banned:
 
@@ -1743,6 +1770,9 @@ The following are banned:
 | Global roles without workspace context | Tenant-scoped memberships and roles |
 | Missing `workspace_id` filters on tenant-owned queries | Mandatory tenant-scoped service queries |
 | Returning raw Elysia/Zod/SQL errors | Standard error envelope with safe codes |
+| ESLint as the default backend linter | Oxlint |
+| Prettier or Biome as the default backend formatter | Oxfmt |
+| Treating Oxlint as TypeScript typecheck | `tsc --noEmit` |
 | Storing blob files or base64 in PostgreSQL | S3-compatible object storage + DB metadata/object keys |
 | Public-read storage buckets by default | Private bucket + presigned URLs |
 | Processing uploads synchronously in HTTP request | BullMQ worker processing |

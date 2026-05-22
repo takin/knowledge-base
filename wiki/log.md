@@ -89,3 +89,7 @@
 - Updated: Mobile Stack: React Native + Expo.
 - Updated: Agent Skills: TypeScript Product Development.
 - Updated: Tech Stacks Index.
+
+## [2026-05-23] ingest | Backend API Oxc Toolchain Defaults
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Tech Stacks Index.
