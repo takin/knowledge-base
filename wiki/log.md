@@ -48,12 +48,44 @@
 
 ## [2026-05-22] maintenance | Tech Stacks frontend hardening
 - Made PWA support optional by default and conditional on product requirements.
-- Promoted CSP nonce handling to an app-level TanStack Start requirement.
 - Made Nginx the mandatory outside-facing Docker gateway; app containers must use internal `expose:` only.
 
-## [2026-05-22] ingest | Web Stack: React + TanStack Start
-- Updated: Web Stack article with frontend-owned scope, direct Nitro Docker runtime command, standard project structure, route/page separation, `getRouteApi` page access, current URL state guidance, RLS pooled-connection warnings, and production observability rules.
+## [2026-05-22] ingest | Legacy web stack cleanup
+- Removed obsolete fullstack SSR web stack article and raw references from the active tech stack set.
 
 ## [2026-05-22] ingest | Tech Stacks Overview
-- Updated: Tech Stacks index platform metadata for the TanStack Start stack.
-- Updated: Web Stack article metadata to reflect frontend-owned or fullstack scope.
+- Updated: Tech Stacks index platform metadata for the active web stacks.
+
+## [2026-05-22] ingest | Web Stack Split: Astro Landing and React Vite Dashboard
+- Created: Web Stack: Astro Landing.
+- Created: Web Stack: React + Vite Dashboard.
+- Updated: Tech Stacks overview registry to make Astro the landing standard and Vite React the dashboard standard.
+- Updated: Tech Stacks index to keep only the active landing and dashboard web standards.
+- Removed the obsolete fullstack SSR web stack references from the wiki per user decision.
+
+## [2026-05-22] maintenance | Removed obsolete web stack references
+- Deleted the obsolete compiled fullstack SSR web stack article.
+- Removed obsolete web stack references from raw tech stack overview, security, infrastructure, backend, agent skills, and mobile mapping notes.
+- Updated landing and dashboard standards to refer generically to fullstack SSR frameworks where needed instead of retaining the obsolete stack name.
+
+## [2026-05-22] ingest | React Vite Dashboard Static Nginx Deployment
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: Tech Stacks Index.
+
+## [2026-05-22] ingest | Dashboard Performance Security And Infra Scope
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: Security Baseline: Web Applications.
+- Updated: CI and Testing: TypeScript + React.
+- Updated: Tech Stacks Index.
+
+## [2026-05-22] ingest | Backend API Standard Cross-Stack Alignment
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: Security Baseline: Web Applications.
+- Updated: CI and Testing: TypeScript + React.
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Mobile Stack: React Native + Expo.
+- Updated: Agent Skills: TypeScript Product Development.
+- Updated: Tech Stacks Index.

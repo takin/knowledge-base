@@ -11,7 +11,7 @@ Raw: [2026-04-15-agent-skills.md](../../../raw/engineering/tech-stacks/2026-04-1
 
 ## Summary
 
-This article lists required AI coding-agent skills by stack so generated code follows the same standards for TypeScript, TanStack Start, Better Auth, Drizzle, Shadcn, Elysia, PostgreSQL, and mobile work.
+This article lists required AI coding-agent skills by stack so generated code follows the same standards for TypeScript, Shadcn, Elysia, PostgreSQL, and mobile work.
 
 ## Standard
 
@@ -25,17 +25,13 @@ When an AI agent implements a product adopting this standard, it **must** load a
 |-------|-------|-----------------|
 | `typescript-best-practice` | All TypeScript files across frontend, fullstack, backend, and mobile | `npx skills add https://github.com/0xbigboss/claude-code --skill typescript-best-practices` |
 
-### 23.2 Frontend & Fullstack (TanStack Start)
+### 23.2 Frontend Web Projects
 
 | Skill | Scope | Install Command |
 |-------|-------|-----------------|
-| `better-auth-best-practice` | Auth configuration and session handling | `npx skills add https://github.com/better-auth/skills --skill better-auth-best-practices` |
-| `drizzle-orm` | Database schema, migrations, and queries | `npx skills add https://github.com/bobmatnyc/claude-mpm-skills --skill drizzle-orm` |
 | `shadcn` | UI component usage and customization | `npx skills add https://github.com/shadcn/ui --skill shadcn` |
 | `shadcn ui` | UI component usage and customization (Stitch Skills) | `npx skills add https://github.com/google-labs-code/stitch-skills --skill shadcn-ui` |
 | `react-state-management` | State layering (TanStack Query / Form / Zustand / useState) | `npx skills add https://github.com/wshobson/agents --skill react-state-management` |
-| `tanstack-start-best-practice` | Server functions, routing, and SSR patterns | `npx skills add https://github.com/deckardger/tanstack-agent-skills --skill tanstack-start-best-practices` |
-| `tanstack-start-project-init` | New project bootstrapping via TanStack CLI | `cd ~/.agents/skills && git clone https://github.com/takin/tanstack-start-init-project .` |
 
 **Exception — Landing page projects:** `shadcn` is optional. Before loading the `shadcn` skill, the agent must ask the user: _"Will this landing page use Shadcn UI, or will you build with custom components / a different component library?"_ Load `shadcn` only if the user confirms yes.
 
@@ -43,14 +39,13 @@ When an AI agent implements a product adopting this standard, it **must** load a
 
 | Skill | Scope | Install Command |
 |-------|-------|-----------------|
-| `better-auth-best-practice` | Auth client configuration and session handling | `npx skills add https://github.com/better-auth/skills --skill better-auth-best-practices` |
 | `react-state-management` | State layering (TanStack Query / Zustand / useState) on mobile | `npx skills add https://github.com/wshobson/agents --skill react-state-management` |
 
 ### 23.4 Backend API (Elysia + Bun)
 
 | Skill | Scope | Install Command |
 |-------|-------|-----------------|
-| `elysiajs` | API routes, Eden Treaty type export, middleware, and plugin patterns | `npx skills add https://github.com/elysiajs/skills --skill elysiajs` |
+| `elysiajs` | API routes, OpenAPI metadata, middleware, guards, and plugin patterns | `npx skills add https://github.com/elysiajs/skills --skill elysiajs` |
 | `drizzle-orm` | Database schema, migrations, and queries | `npx skills add https://github.com/bobmatnyc/claude-mpm-skills --skill drizzle-orm` |
 | `postgresql-table-design` | Table design, RLS policies, and index strategy | `npx skills add https://github.com/wshobson/agents --skill postgresql-table-design` |
 

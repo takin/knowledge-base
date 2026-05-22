@@ -2,49 +2,52 @@
 
 Updated: 2026-05-22
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
 Platform: Mobile
 Runtime: Expo / JavaScript
 Framework: React Native + Expo Router
-Primary Use Case: Mobile applications that share the TypeScript product model with the web stack
+Primary Use Case: Mobile applications sharing product architecture with the web stack and consuming the backend API through generated OpenAPI clients
 Raw: [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md)
 
 ## Summary
 
-This stack maps the web product standards to React Native with Expo Router, NativeWind, TanStack Query/Form, Zustand, Better Auth client, Sentry, and Maestro.
+This stack maps web product standards to React Native with Expo Router, NativeWind, TanStack Query/Form, Zustand, JWT access tokens with refresh rotation, an OpenAPI-generated API client, secure native token storage, Sentry, and Maestro.
 
-## Standard
-
-## 17. Mobile: React Native (Expo)
-
-The same principles and standards that govern web products apply to mobile products built with **React Native (Expo)**.
-
-Specific mappings:
+## Standard Mappings
 
 | Web standard | Mobile equivalent |
-|---|---|
-| TanStack Start | Expo Router (file-based routing) |
-| TanStack Query | TanStack Query (same library, React Native compatible) |
-| TanStack Form + Zod | TanStack Form + Zod (same) |
-| Zustand | Zustand (same) |
-| Tailwind CSS v4 | **NativeWind v4** (Tailwind for React Native) |
-| Shadcn UI | **Shadcn/RN** — community port of Shadcn components for React Native, built on NativeWind v4 and Radix primitives adapted for mobile. Pull from the shared internal Shadcn preset repo as the baseline. |
-| Better Auth | Better Auth client (same client library, React Native compatible) |
-| Sentry | `@sentry/react-native` (same optional/runtime-toggle pattern) |
-| Vitest + Playwright | Vitest + Maestro (E2E for mobile) |
-| BunJS runtime | Not applicable — Expo/Metro handles the mobile bundle |
+| --- | --- |
+| Web routing | Expo Router |
+| TanStack Query | TanStack Query |
+| TanStack Form + Zod | TanStack Form + Zod |
+| Zustand | Zustand |
+| Tailwind CSS v4 | NativeWind v4 |
+| Shadcn UI | Shadcn/RN community port or shared internal preset |
+| Backend auth | JWT access tokens, refresh rotation, OpenAPI-generated API client, secure native token storage |
+| Sentry | `@sentry/react-native` with runtime toggle |
+| Vitest + Playwright | Vitest + Maestro |
+| Bun runtime | Not applicable; Expo/Metro handles the mobile bundle |
 
-**Why NativeWind v4 over alternatives (Tamagui, Unistyles):**
-NativeWind v4 uses the same Tailwind CSS class names and CSS variable token system as the web stack. A developer who knows the web product can work on mobile without learning a new styling paradigm. Tamagui is more performant at compile time but introduces its own design system and component primitives that would diverge from the web tokens and the shared Shadcn preset. Unistyles v3 is excellent for performance-critical cases but lacks the Tailwind mental model that unifies the team. NativeWind is the pragmatic choice for a cross-platform team building products with a shared design language.
+## Rules
 
-Rules:
-- Mobile apps live in the same product repo under `apps/mobile/` (see §18.2).
-- Dark/Light mode is mandatory on mobile (use Expo's `useColorScheme` + NativeWind's `dark:` variant).
-- The `"use client"` directive rule does not apply to React Native.
-- No `useEffect` for data fetching on mobile — same policy as web.
-- Design tokens (colors, spacing, typography) are shared from the same source as the web product. In a monorepo, the `packages/ui/` shared package exports the token definitions used by both web (Tailwind CSS variables) and mobile (NativeWind CSS variables).
-- NativeWind v4 requires the Babel preset — ensure `babel.config.js` is configured per the NativeWind v4 setup guide.
-- Do not use React Native's `StyleSheet.create()` for product UI — use NativeWind utility classes. `StyleSheet` is permitted only for performance-critical animations or third-party library integration.
-- **Maestro** is the standard mobile E2E test runner. It uses a declarative YAML flow DSL (`- tapOn:`, `- assertVisible:`) that AI coding agents generate accurately and consistently. Detox requires native build coupling and imperative JavaScript that is harder for agents to produce correctly. Maestro flows live in `tests/e2e/` alongside Playwright web tests.
+- Mobile apps live in the product repo under `apps/mobile/` when the product uses a monorepo.
+- Dark/light mode is mandatory using Expo color scheme integration plus NativeWind `dark:` variants.
+- The React `"use client"` directive rule does not apply to React Native.
+- Do not use `useEffect` for data fetching; use TanStack Query.
+- Use secure native token storage for refresh/access token handling.
+- The OpenAPI-generated mobile API client must be regenerated or checked in CI whenever the backend OpenAPI contract changes.
+- Mobile client generation uses a committed/CI-generated OpenAPI artifact or an authenticated docs-enabled environment, not unauthenticated production `/docs/json`.
+- Design tokens are shared from the same source as web where possible.
+- NativeWind v4 requires Babel preset configuration.
+- Do not use `StyleSheet.create()` for normal product UI; use NativeWind utility classes. `StyleSheet` is allowed for performance-critical animations or third-party integration.
+- Maestro is the standard mobile E2E runner and flows live in `tests/e2e/`.
 
----
+## NativeWind Rationale
+
+NativeWind v4 preserves the Tailwind mental model across web and mobile. It lets developers reuse class names, token thinking, and CSS variable conventions. Tamagui and Unistyles can be appropriate for specialized performance or design-system needs, but NativeWind is the pragmatic default for cross-platform teams that want shared product language.
+
+## See Also
+
+- [Backend: Bun + Elysia](backend-bun-elysia.md)
+- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)

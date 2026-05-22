@@ -51,7 +51,7 @@ Rules:
 
 `.env` is in `.gitignore`. The `.env.example` is the source of truth for what variables exist — every new secret added to Vault must also be added (with an empty value) to `.env.example`.
 
-### 14.3 Required environment variables (baseline)
+### 14.4 Required environment variables (baseline)
 
 Every product must define at minimum:
 
@@ -61,14 +61,33 @@ APP_ENV=development          # development | staging | production
 APP_URL=http://localhost:3000
 
 # Database
+# Staging/production DATABASE_URL points to PgBouncer, not directly to Postgres.
 DATABASE_URL=postgresql://...
 
-# Auth (Better Auth)
-BETTER_AUTH_SECRET=...
-BETTER_AUTH_URL=http://localhost:3000
+# Auth (JWT / JOSE)
+JWT_ISSUER=http://localhost:3000
+JWT_AUDIENCE=example-api
+JWT_ACTIVE_KID=local-dev-key
+JWT_PRIVATE_JWK=...
+JWT_PUBLIC_JWKS=...
 
-# Redis (if used)
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# Redis / BullMQ
 REDIS_URL=redis://localhost:6379
+
+# Storage
+STORAGE_ENDPOINT=http://localhost:9000
+STORAGE_BUCKET=example-local-media
+STORAGE_ACCESS_KEY=...
+STORAGE_SECRET_KEY=...
+
+# Telemetry
+OTEL_SERVICE_NAME=example-api
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+OTEL_TRACES_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
 
 # Monitoring (optional)
 SENTRY_ENABLED=false
@@ -79,22 +98,24 @@ SENTRY_DSN=
 
 ## 19. Nginx — Reverse Proxy & Compression
 
-Nginx sits in front of **every application adopting this standard** — both the fullstack/frontend app and the backend API. It is the single point of entry for all HTTP traffic and is responsible for compression, security headers, TLS termination, static asset caching, and upstream load balancing.
+Nginx sits in front of every deployed HTTP surface adopting this standard. For backend APIs, it is the single point of entry for TLS termination, compression, baseline security headers, coarse IP rate limiting, request-size limits, and upstream load balancing.
 
-Nginx is not optional. It is the required outside-facing gateway for every deployed app adopting this stack. TanStack Start, Elysia, or any other application process must never be directly reachable from outside the Docker network in staging or production.
+Nginx is not optional. It is the required outside-facing gateway for every deployed application process adopting this stack. Backend services or other application processes must never be directly reachable from outside the Docker network in staging or production.
 
 ### 19.1 Placement in Docker Compose
 
-Every product's `docker-compose.yml` includes a dedicated Nginx service that proxies to the application container. The app container exposes its port **only internally** (via `expose:`, not `ports:`). Nginx is the only service bound to the host.
+Every deployed backend API runtime service's `docker-compose.yml` includes a dedicated Nginx service that proxies to the API container. The API container exposes its port **only internally** (via `expose:`, not `ports:`). Nginx is the only service bound to the host.
+
+This reverse-proxy shape is for backend APIs and approved runtime application processes. Static Vite dashboard deployments do not use this proxy-to-app shape; they serve `dist/` directly from Nginx as defined in `2026-05-22-web-react-vite-dashboard-stack.md`.
 
 The deployment artifact must include both:
-- an application image, usually based on `oven/bun`, running TanStack Start or the backend service;
+- an API image, usually based on `oven/bun`, running the backend service or another approved runtime process;
 - an Nginx gateway image, based on the approved Nginx+Brotli image, bound to host ports.
 
-The app image must not publish host ports. Direct outside access to the app process bypasses CSP nonce propagation, security headers, Brotli/Gzip compression, static cache rules, rate limiting, and upstream retry behavior.
+The API image must not publish host ports. Direct outside access to the API process bypasses security headers, Brotli/Gzip compression, coarse edge rate limiting, request-size limits, and upstream retry behavior.
 
 ```
-[Client] → [Nginx :80/:443] → [App container :3000]
+[Client] → [Nginx :80/:443] → [API container :3000]
                             → [PgBouncer :5432] → [Postgres]
                             → [Redis :6379]
 ```
@@ -103,30 +124,125 @@ Required Compose shape:
 
 ```yaml
 services:
-  app:
-    image: example-web:${TAG}
+  api:
+    image: example-api:${TAG}
     expose:
       - "3000"
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       APP_ENV: production
+    depends_on:
+      - pgbouncer
+      - redis
+
+  worker:
+    image: example-api:${TAG}
+    command: ["bun", "run", "worker"]
+    stop_grace_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      APP_ENV: production
+    depends_on:
+      - pgbouncer
+      - redis
 
   nginx:
-    image: example-web-nginx:${TAG}
+    image: example-api-nginx:${TAG}
     ports:
       - "80:80"
       - "443:443"
     environment:
-      NGINX_UPSTREAM_HOST: app
+      NGINX_UPSTREAM_HOST: api
       NGINX_UPSTREAM_PORT: 3000
     depends_on:
-      - app
+      - api
+```
+
+### 19.1.1 Backend API + Worker + Observability Profile
+
+Standalone Bun + Elysia backend APIs use a runtime-service deployment profile with separate API and worker processes.
+
+Baseline services:
+
+```text
+nginx
+api
+worker
+postgres
+pgbouncer
+redis
+otel-collector
+prometheus
+loki
+tempo
+grafana
+certbot
+```
+
+Optional project services:
+
+```text
+minio
+mailpit
+bull-board
+```
+
+Rules:
+- `api` and `worker` use the same application image but different commands.
+- `api` handles HTTP traffic only.
+- `worker` processes BullMQ jobs only.
+- Do not run BullMQ workers inside the API process in production.
+- `api` and `worker` both connect to PgBouncer, Redis, object storage, and OpenTelemetry Collector.
+- Redis is mandatory for BullMQ, rate limiting, permission cache, and short-lived coordination.
+- PgBouncer runs in transaction mode.
+- `api` and `worker` use separate `stop_grace_period` values because HTTP drain and job drain have different timing needs.
+- `api` `stop_grace_period` must be at least `30s`.
+- `worker` `stop_grace_period` must be at least `60s`; media/import-heavy projects may require longer.
+- Production media storage should prefer managed S3-compatible storage such as Cloudflare R2 or AWS S3. Self-hosted MinIO in production requires documented backup, retention, and restore procedures.
+- Grafana stack is the default self-hosted observability profile on VPS.
+
+Deployment topology:
+
+```mermaid
+flowchart TB
+    Internet[Internet] --> Nginx[Nginx :80/:443]
+    Nginx --> API[api container :3000]
+
+    API --> PgBouncer[pgbouncer]
+    PgBouncer --> Postgres[(postgres)]
+    API --> Redis[(redis)]
+    API --> Storage[S3-compatible storage]
+
+    Worker[worker container] --> PgBouncer
+    Worker --> Redis
+    Worker --> Storage
+
+    API --> OTel[otel-collector]
+    Worker --> OTel
+    OTel --> Prometheus[prometheus]
+    OTel --> Loki[loki]
+    OTel --> Tempo[tempo]
+    Prometheus --> Grafana[grafana]
+    Loki --> Grafana
+    Tempo --> Grafana
+
+    Certbot[certbot] --> Nginx
 ```
 
 ### 19.2 Docker image: Nginx + Brotli
 
 The standard Nginx Docker image does not include Brotli. Use **`fholzer/nginx-brotli`** as the base image — it ships the `ngx_brotli` module pre-compiled against the latest stable Nginx.
 
-Each product maintains a minimal `nginx/` directory:
+For static SPA dashboard deployments, use `fholzer/nginx-brotli:<pinned-version>` directly in the dashboard runtime stage. Do not create a separate `nginx/Dockerfile` and do not install Certbot into the dashboard image.
+
+Runtime services that proxy to an API container maintain a minimal `nginx/` directory:
 
 ```
 nginx/
@@ -149,13 +265,37 @@ ENTRYPOINT ["/entrypoint.sh"]
 #!/bin/sh
 set -e
 envsubst '${NGINX_UPSTREAM_HOST} ${NGINX_UPSTREAM_PORT} ${NGINX_BROTLI_ENABLED}
-          ${NGINX_GZIP_ENABLED} ${NGINX_WORKER_PROCESSES} ${NGINX_WORKER_CONNECTIONS}
-          ${NGINX_KEEPALIVE_TIMEOUT} ${NGINX_CLIENT_MAX_BODY_SIZE}
-          ${NGINX_RATE_LIMIT_RPS} ${NGINX_SSL_ENABLED}
-          ${CSP_FRAME_SRC} ${CSP_IMG_SRC} ${CSP_SCRIPT_SRC} ${CSP_CONNECT_SRC}' \
+           ${NGINX_GZIP_ENABLED} ${NGINX_WORKER_PROCESSES} ${NGINX_WORKER_CONNECTIONS}
+           ${NGINX_KEEPALIVE_TIMEOUT} ${NGINX_CLIENT_MAX_BODY_SIZE}
+           ${NGINX_RATE_LIMIT_RPS} ${NGINX_SSL_ENABLED}' \
   < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 exec nginx -g 'daemon off;'
 ```
+
+### 19.2.1 Static SPA Dashboard Profile
+
+Static Vite dashboard deployment is a specialized profile, not the generic reverse-proxy runtime-service profile above.
+
+Source of truth: `2026-05-22-web-react-vite-dashboard-stack.md`.
+
+Infra-level invariants:
+- Dashboard production deployment must use Docker Compose.
+- Dashboard production runtime must use Nginx serving Vite `dist/` directly from `/usr/share/nginx/html`.
+- Dashboard runtime must not run Bun, Node, Vite, `vite preview`, a custom static server, or proxy to an internal dashboard app server.
+- Dashboard production must terminate TLS at Nginx with Let's Encrypt certificates.
+- Port 80 may only serve ACME HTTP-01 challenge files and HTTPS redirects.
+- Certificates must live in Docker volumes, not image layers.
+- Certificate issuance and renewal must be handled by a Certbot sidecar or approved equivalent renewal container.
+- Nginx must reload after successful certificate renewal, and certificate expiry must be monitored.
+- Static dashboard containers should use a read-only filesystem and drop unnecessary Linux capabilities where compatible.
+- Dashboard runtime images must not include secrets, public source maps, source control metadata, local caches, test reports, coverage, Playwright artifacts, or dependency install caches.
+- Static hashed assets must use immutable cache headers, while `index.html` must use no-cache or must-revalidate headers.
+
+Do not copy the generic `nginx/Dockerfile`, upstream proxy, or rolling app-service deploy template into dashboard projects. Dashboard projects use the deployment contract defined in the dashboard stack draft.
+
+### 19.2.2 Generic Runtime Service Nginx Template
+
+The following Nginx template is for backend APIs and approved runtime services that proxy to an internal API container. It is not the dashboard static SPA template and does not include CSP nonce propagation, robots/sitemap handling, static asset caching, or SSR cache rules.
 
 `nginx/nginx.conf.template`:
 ```nginx
@@ -183,10 +323,12 @@ http {
     keepalive_timeout ${NGINX_KEEPALIVE_TIMEOUT};
     server_tokens off;
 
-    # Request body / upload limits
+    # Request body / upload limits. Backend APIs default to small JSON/form
+    # payloads; large media uploads use presigned object-storage URLs.
     client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};
 
-    # Basic request-rate limiting per IP
+    # Coarse per-IP edge protection only. Product/user/workspace/API-client
+    # limits are enforced inside the Elysia API with Redis-backed policies.
     limit_req_zone $binary_remote_addr zone=per_ip:10m rate=${NGINX_RATE_LIMIT_RPS}r/s;
 
     # Brotli: primary compression
@@ -222,7 +364,7 @@ http {
         application/atom+xml
         image/svg+xml;
 
-    upstream app_backend {
+    upstream api_backend {
         least_conn;
         server ${NGINX_UPSTREAM_HOST}:${NGINX_UPSTREAM_PORT};
         keepalive 64;
@@ -231,11 +373,9 @@ http {
     server {
         listen 80;
         server_name _;
-        set $csp_nonce $request_id;
 
         # Security headers are repeated in locations that set their own headers because
         # nginx does not inherit parent add_header directives in that case.
-        add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
         add_header Strict-Transport-Security $hsts_header always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
@@ -244,7 +384,6 @@ http {
         add_header Cross-Origin-Opener-Policy "same-origin" always;
 
         location /health {
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
             add_header Strict-Transport-Security $hsts_header always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header X-Frame-Options "DENY" always;
@@ -253,12 +392,15 @@ http {
             add_header Cross-Origin-Opener-Policy "same-origin" always;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
-            proxy_pass http://app_backend/health;
+            proxy_pass http://api_backend/health;
         }
 
         location /ready {
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
+            allow 127.0.0.1;
+            allow 10.0.0.0/8;
+            allow 172.16.0.0/12;
+            allow 192.168.0.0/16;
+            deny all;
             add_header Strict-Transport-Security $hsts_header always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header X-Frame-Options "DENY" always;
@@ -267,48 +409,22 @@ http {
             add_header Cross-Origin-Opener-Policy "same-origin" always;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
-            proxy_pass http://app_backend/ready;
+            proxy_pass http://api_backend/ready;
         }
 
-        location = /robots.txt {
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
-            add_header Strict-Transport-Security $hsts_header always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "DENY" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-            add_header Cross-Origin-Opener-Policy "same-origin" always;
-            add_header Cache-Control "public, max-age=3600" always;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
-            proxy_pass http://app_backend;
+        location /metrics {
+            allow 127.0.0.1;
+            allow 10.0.0.0/8;
+            allow 172.16.0.0/12;
+            allow 192.168.0.0/16;
+            deny all;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_pass http://api_backend/metrics;
         }
 
-        location = /sitemap.xml {
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
-            add_header Strict-Transport-Security $hsts_header always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "DENY" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-            add_header Cross-Origin-Opener-Policy "same-origin" always;
-            add_header Cache-Control "public, max-age=3600" always;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
-            proxy_pass http://app_backend;
-        }
-
-        location ~* \.(js|css|woff2|woff|ttf|svg|png|jpg|webp|avif|ico)$ {
-            expires 1y;
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
-            add_header Strict-Transport-Security $hsts_header always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "DENY" always;
-            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-            add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-            add_header Cross-Origin-Opener-Policy "same-origin" always;
-            add_header Cache-Control "public, max-age=31536000, immutable" always;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
-            proxy_pass http://app_backend;
+        location ~ ^/docs(/json)?$ {
+            return 404;
         }
 
         location / {
@@ -319,62 +435,53 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-CSP-Nonce $csp_nonce;
             proxy_set_header Connection "";
 
             proxy_next_upstream error timeout http_502 http_503 http_504;
             proxy_next_upstream_tries 2;
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
 
-            add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
             add_header Strict-Transport-Security $hsts_header always;
             add_header X-Content-Type-Options "nosniff" always;
             add_header X-Frame-Options "DENY" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
             add_header Cross-Origin-Opener-Policy "same-origin" always;
-            add_header Cache-Control "public, max-age=0, must-revalidate" always;
-            proxy_pass http://app_backend;
+            proxy_pass http://api_backend;
         }
     }
 }
 ```
 
-Use this as the baseline template. Products may extend it for TLS certificates, multiple upstreams, product-specific path rules, or additional CSP sources, but Brotli module loading, gzip fallback, upstream proxying, `X-CSP-Nonce` forwarding, nonce-based CSP, and baseline security headers must remain intact. Do not use `if` inside the `server` block for HSTS toggling; use a `map` at the `http` level and feed the result into `add_header`.
+Use this as the backend API baseline template. Products may extend it for TLS certificates, multiple upstreams, product-specific path rules, or additional response headers, but Brotli module loading, gzip fallback, upstream proxying, edge IP rate limiting, and baseline security headers must remain intact. Do not use `if` inside the `server` block for HSTS toggling; use a `map` at the `http` level and feed the result into `add_header`.
 
 #### Default Nginx security template rules
 
-The Nginx security baseline is derived from a production TanStack Start deployment and generalized for reuse. Keep the default policy strict. Do not hardcode analytics, payment, storage, iframe, or regional collection endpoints into the base template.
-
-Default CSP expression:
-
-```nginx
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self' ${CSP_FRAME_SRC}; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: ${CSP_IMG_SRC}; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce' ${CSP_SCRIPT_SRC}; connect-src 'self' ${CSP_CONNECT_SRC}; upgrade-insecure-requests; trusted-types default" always;
-```
+The backend API Nginx security baseline is generalized for JSON APIs. Keep the default policy strict and small.
 
 Rules:
-- The default values for `CSP_FRAME_SRC`, `CSP_IMG_SRC`, `CSP_SCRIPT_SRC`, and `CSP_CONNECT_SRC` are empty strings.
-- Product-specific third-party domains are added only when the project actually uses that provider.
-- Every third-party CSP source must be justified in the project ADR or security review.
-- Any added `script-src` source must preserve `'nonce-$csp_nonce'`.
+- Backend API Nginx templates do not include CSP nonce handling by default.
+- CSP belongs in the static dashboard Nginx template or in an approved web runtime template that actually serves HTML.
+- Product-specific third-party domains are not added to the backend API template.
+- Static asset caching rules do not belong in the backend API proxy template.
+- `robots.txt`, `sitemap.xml`, SPA fallback, and SSR HTML cache rules belong in frontend/web runtime templates only.
 - Every Nginx `location` block that defines any `add_header` must repeat the complete security header set, because Nginx does not inherit parent `add_header` directives in that case.
-- Nginx must set one request nonce with `set $csp_nonce $request_id;` and forward it with `proxy_set_header X-CSP-Nonce $csp_nonce;` in every proxied location.
+- If a backend endpoint returns private or user-specific data, application code must set `Cache-Control: no-store`.
 
-Optional provider examples:
+#### Edge vs backend rate limiting
 
-```env
-# Google Tag Manager, only when used
-CSP_SCRIPT_SRC=https://www.googletagmanager.com
+Nginx `limit_req` is a coarse per-IP abuse shield. It protects Bun from obvious traffic floods and should be simple enough to reason about during an incident.
 
-# Google Analytics, only when used
-CSP_IMG_SRC=https://www.google-analytics.com
-CSP_CONNECT_SRC=https://www.google-analytics.com
+The Elysia API remains the source of truth for product rate limits because only the application can identify users, workspaces, API clients, scopes, route groups, request cost, auth endpoints, upload intent endpoints, and webhook provider behavior.
 
-# Optional regional Google Analytics endpoint. This varies by project and region.
-# Add only after verifying the deployed analytics endpoint.
-CSP_CONNECT_SRC=https://www.google-analytics.com https://region1.google-analytics.com
-```
-
-Do not copy these provider examples into every project by default. Regional endpoints such as `region1.google-analytics.com` are optional and project-specific.
+Rules:
+- Do not encode product plans, workspace quotas, user tiers, or API-client quotas in Nginx.
+- Do not rely on Nginx rate limiting as the only limiter for public APIs.
+- Keep Nginx limits broad enough to avoid blocking legitimate NAT-heavy customers.
+- Return detailed `RateLimit-*` headers from the Elysia limiter, not from Nginx.
+- Treat Nginx 429s as infrastructure protection events and Elysia 429s as product/API policy events.
 
 ### 19.3 Compression strategy
 
@@ -396,73 +503,48 @@ All Nginx tuning parameters are injected via environment variables at container 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NGINX_UPSTREAM_HOST` | `app` | Docker Compose service name of the app container |
-| `NGINX_UPSTREAM_PORT` | `3000` | Port the app container listens on |
+| `NGINX_UPSTREAM_HOST` | `api` | Docker Compose service name of the API container |
+| `NGINX_UPSTREAM_PORT` | `3000` | Port the API container listens on |
 | `NGINX_BROTLI_ENABLED` | `on` | Enable/disable Brotli compression (`on` / `off`) |
 | `NGINX_GZIP_ENABLED` | `on` | Enable/disable Gzip fallback (`on` / `off`) |
 | `NGINX_WORKER_PROCESSES` | `auto` | Nginx worker count (matches CPU cores when `auto`) |
 | `NGINX_WORKER_CONNECTIONS` | `1024` | Max simultaneous connections per worker |
 | `NGINX_KEEPALIVE_TIMEOUT` | `65` | Keep-alive timeout in seconds |
-| `NGINX_CLIENT_MAX_BODY_SIZE` | `10m` | Max request body size (increase for file uploads) |
+| `NGINX_CLIENT_MAX_BODY_SIZE` | `1m` | Max backend API request body size; media uses presigned object-storage uploads |
 | `NGINX_RATE_LIMIT_RPS` | `20` | Requests per second per IP before 429 |
 | `NGINX_SSL_ENABLED` | `off` | Enable TLS termination at Nginx (`on` in production) |
-| `CSP_FRAME_SRC` | empty | Additional frame sources, only when a product embeds trusted frames |
-| `CSP_IMG_SRC` | empty | Additional image beacon/CDN sources, only when required |
-| `CSP_SCRIPT_SRC` | empty | Additional script sources, only when required and reviewed |
-| `CSP_CONNECT_SRC` | empty | Additional API/analytics endpoints, only when required and reviewed |
 
 All variables have sensible defaults. Local development requires only `NGINX_UPSTREAM_HOST` and `NGINX_UPSTREAM_PORT` in `.env`.
 
 ### 19.5 Security headers at Nginx level
 
-Baseline shared security headers are applied at the Nginx level. Nginx also owns the baseline nonce-based Content Security Policy and forwards the request nonce to the app with `X-CSP-Nonce`. TanStack Start applications must read that header and pass the same value into TanStack Router SSR (§12.1.1).
-
-Product-specific CSP sources may extend the baseline policy for analytics, payment providers, object storage/CDN hosts, embedded frames, or media providers. These extensions require explicit review and must preserve `script-src 'self' 'nonce-$csp_nonce'`.
+Baseline shared security headers are applied at the Nginx level. Backend API proxy templates do not own frontend CSP nonce handling because they do not serve HTML.
 
 The `nginx.conf.template` adds these headers on every response:
 
 ```nginx
-set $csp_nonce $request_id;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-$csp_nonce'; connect-src 'self'; upgrade-insecure-requests; trusted-types default" always;
 add_header Strict-Transport-Security $hsts_header always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 add_header Cross-Origin-Opener-Policy "same-origin" always;
-proxy_set_header X-CSP-Nonce $csp_nonce;
 ```
 
 Important Nginx behavior: if a `location` block defines any `add_header`, it stops inheriting parent `add_header` directives. Any location that sets caching or other custom headers must repeat the complete security header set.
 
 ### 19.6 Static asset caching
 
-Static assets served via Nginx (JS, CSS, fonts, images) must carry aggressive cache headers. Application code generates hashed filenames (TanStack Start / Vite handles this); Nginx caches them permanently.
+Static asset caching is a frontend/web-runtime concern, not a backend API proxy concern. For static Vite dashboard deployments, use the caching rules in `2026-05-22-web-react-vite-dashboard-stack.md`.
 
-```nginx
-location ~* \.(js|css|woff2|woff|ttf|svg|png|jpg|webp|avif|ico)$ {
-    expires 1y;
-    add_header Cache-Control "public, max-age=31536000, immutable" always;
-    proxy_set_header X-CSP-Nonce $csp_nonce;
-}
-```
-
-SSR HTML should be revalidated instead of permanently cached:
-
-```nginx
-location / {
-    add_header Cache-Control "public, max-age=0, must-revalidate" always;
-}
-```
-
-API responses that contain private, transactional, or user-specific data must still opt into `Cache-Control: no-store` at the application layer.
+Backend API responses that contain private, transactional, or user-specific data must opt into `Cache-Control: no-store` at the application layer. Public cacheable API responses require explicit product review and must include correct authorization and tenant-isolation guarantees.
 
 ### 19.7 Upstream load balancing
 
-When multiple app instances are running (e.g., two replicas in Docker Compose), Nginx distributes traffic via `least_conn` (routes to the instance with the fewest active connections — better than round-robin for variable-length requests).
+When multiple API instances are running (e.g., two replicas in Docker Compose), Nginx distributes traffic via `least_conn` (routes to the instance with the fewest active connections, which is better than round-robin for variable-length requests).
 
 ```nginx
-upstream app_backend {
+upstream api_backend {
     least_conn;
     server ${NGINX_UPSTREAM_HOST}:${NGINX_UPSTREAM_PORT};
     # add more servers here for horizontal scaling
@@ -496,25 +578,32 @@ Pod receives SIGTERM
 
 During that propagation gap, Nginx may still route new requests to a container that has stopped accepting connections. The result: `502 Bad Gateway` errors for users.
 
-#### Docker Compose Rolling Update — Single Script
+#### Docker Compose Rolling Update — Deterministic Requirement
 
-All deployment procedures are consolidated into a single script to prevent skipped or reversed steps. The script is the **only** acceptable way to deploy a service adopting this standard.
+Deployment procedures must be deterministic. A script that only checks `http://localhost/ready` through Nginx is not sufficient, because the old instance can make that health check pass while the new instance is still unhealthy.
+
+The deployment script is the **only** acceptable way to deploy a service adopting this standard, but each project must implement it with one of these deterministic strategies:
+- Blue/green services, for example `api_blue` and `api_green`, with Nginx switched only after the target color is healthy.
+- Container-specific readiness checks against the newly-created container before any old container is removed.
+- Kubernetes rolling updates when the project has moved to Tier 3.
+
+The example below is a single-host skeleton showing required checks. It must be adapted per project so the new container is identified and checked directly.
 
 **Script location:** `infra/scripts/deploy.sh`
 
 ```bash
 #!/usr/bin/env bash
-# Tech Stacks — Zero-Downtime Docker Compose Deployment Script
-# Usage: ./deploy.sh <app_service_name> [health_url] [timeout_seconds]
+# Tech Stacks — Deterministic Docker Compose Deployment Script Skeleton
+# Usage: ./deploy.sh <api_service_name> [health_url] [timeout_seconds]
 #
 # Defaults:
-#   app_service_name : app
+#   api_service_name : api
 #   health_url       : http://localhost/ready
 #   timeout_seconds  : 30
 
 set -euo pipefail
 
-APP_SERVICE="${1:-app}"
+API_SERVICE="${1:-api}"
 HEALTH_URL="${2:-http://localhost/ready}"
 TIMEOUT="${3:-30}"
 HEALTH_CHECK_INTERVAL=2
@@ -522,14 +611,16 @@ HEALTH_CHECK_INTERVAL=2
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2; exit 1; }
 
-# Verify health endpoint is reachable before starting
+# Verify the public health endpoint is reachable before starting.
 check_prereq() {
     if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
-        error "Health endpoint $HEALTH_URL is not reachable. Is the app running?"
+        error "Health endpoint $HEALTH_URL is not reachable. Is the API running?"
     fi
 }
 
-# Wait for service to be healthy
+# Wait for a specific new container or blue/green target to be healthy.
+# Implement this with project-specific container identification; do not rely
+# only on Nginx routing to an arbitrary healthy old instance.
 wait_for_healthy() {
     local service="$1"
     local count=0
@@ -547,11 +638,11 @@ wait_for_healthy() {
     log "$service is healthy."
 }
 
-# Verify service is running
+# Verify the routed service after the new target has already passed its own readiness check.
 verify() {
     log "Verifying deployment..."
     local ps_output
-    ps_output=$(docker compose ps "$APP_SERVICE" 2>&1)
+    ps_output=$(docker compose ps "$API_SERVICE" 2>&1)
     echo "$ps_output"
 
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
@@ -565,34 +656,35 @@ verify() {
 main() {
     check_prereq
 
-    log "=== Starting zero-downtime deployment for $APP_SERVICE ==="
+    log "=== Starting zero-downtime deployment for $API_SERVICE ==="
 
     # Step 1: Pull new image without stopping anything
     log "Step 1/5 — Pulling new image..."
-    docker compose pull "$APP_SERVICE"
+    docker compose pull "$API_SERVICE"
 
-    # Step 2: Scale to 2 instances (old + new running simultaneously)
-    log "Step 2/5 — Scaling to 2 instances..."
-    docker compose up -d --no-deps --scale "${APP_SERVICE}=2" --no-recreate "$APP_SERVICE"
+    # Step 2: Start a new target (old + new running simultaneously)
+    log "Step 2/5 — Starting new target..."
+    docker compose up -d --no-deps --scale "${API_SERVICE}=2" --no-recreate "$API_SERVICE"
 
-    # Step 3: Wait for new instance to pass health check
-    log "Step 3/5 — Waiting for new instance to be healthy..."
+    # Step 3: Wait for the new target to pass container-specific readiness.
+    # This placeholder must check the new container/target directly.
+    log "Step 3/5 — Waiting for new target to be healthy..."
     wait_for_healthy "new instance"
 
-    # Step 4: Scale back to 1 — oldest instance removed
-    log "Step 4/5 — Scaling back to 1 instance (old removed)..."
-    docker compose up -d --no-deps --scale "${APP_SERVICE}=1" --no-recreate "$APP_SERVICE"
+    # Step 4: Switch traffic or remove old target only after the new target is healthy.
+    log "Step 4/5 — Draining old target..."
+    docker compose up -d --no-deps --scale "${API_SERVICE}=1" --no-recreate "$API_SERVICE"
 
     # Step 5: Verify
     log "Step 5/5 — Verifying deployment..."
     verify
 
-    log "=== Deployment complete — zero downtime achieved ==="
+    log "=== Deployment complete ==="
 }
 
 # Rollback procedure (call with: ./deploy.sh rollback <service>)
 rollback() {
-    local service="${1:-app}"
+    local service="${1:-api}"
     log "Rolling back $service..."
     docker compose up -d --no-deps --scale "${service}=1" --no-recreate "$service"
     log "Rollback complete."
@@ -600,7 +692,7 @@ rollback() {
 
 # Parse command
 case "${1:-}" in
-    rollback) rollback "${2:-app}" ;;
+    rollback) rollback "${2:-api}" ;;
     *) main ;;
 esac
 ```
@@ -626,34 +718,64 @@ esac
 - Always use this script. If the script is missing or broken, fix the script first — do not improvise.
 - The script must be committed to the repository under `infra/scripts/deploy.sh`.
 - Test the script in staging before using in production.
+- The script must prove the new container or blue/green target is ready before removing the old target.
+- Do not use only `http://localhost/ready` through Nginx as proof that the new target is ready.
 
 #### Graceful Shutdown — SIGTERM Handler
 
-The app must handle `SIGTERM` from Docker correctly. This is already covered in §20.10, but the sequence is reproduced here for completeness:
+The API and worker processes must handle `SIGTERM` from Docker correctly. This is already covered in the backend stack, but the infrastructure requirements are reproduced here for completeness.
 
-```
-App receives SIGTERM
-  → isShuttingDown = true  (/ready returns 503 immediately)
-  → Nginx detects /ready failure → stops routing to this instance
-  → App drains in-flight requests (max stop_grace_period: 30s)
-  → App exits cleanly (exit code 0)
+API shutdown sequence:
+
+```text
+api receives SIGTERM
+  -> isShuttingDown = true
+  -> /ready returns 503 immediately
+  -> Nginx stops routing new requests to this instance
+  -> api stops accepting new HTTP requests
+  -> api drains in-flight requests within HTTP_DRAIN_TIMEOUT_MS
+  -> active DB transactions commit or rollback
+  -> api closes SQL, Redis, BullMQ, and telemetry connections
+  -> api exits cleanly before stop_grace_period expires
 ```
 
-The combined zero-downtime guarantee requires **both** the deploy script (for orchestration) **and** the SIGTERM handler (for app-level drain). Neither alone is sufficient.
+Worker shutdown sequence:
+
+```text
+worker receives SIGTERM
+  -> worker stops taking new BullMQ jobs
+  -> active jobs finish within WORKER_SHUTDOWN_TIMEOUT_MS
+  -> active job transactions commit or rollback
+  -> worker closes BullMQ workers and queues
+  -> worker closes SQL, Redis, and telemetry connections
+  -> worker exits cleanly before stop_grace_period expires
+```
+
+Docker rules:
+- `docker compose down` sends `SIGTERM`, waits for `stop_grace_period`, then sends `SIGKILL`.
+- `docker compose down` is not zero-downtime; it is a full environment stop.
+- During `docker compose down`, the requirement is clean rollback/closure, not continued availability.
+- API containers must use `stop_grace_period: 30s` minimum.
+- Worker containers must use `stop_grace_period: 60s` minimum.
+- If a job can exceed the worker grace period, it must checkpoint progress and be safe to retry.
+- Worker shutdown must close BullMQ workers before closing shared Redis connections.
+- SQL pools must close only after in-flight HTTP handlers and active jobs are drained or timed out.
+
+The combined zero-downtime guarantee requires **both** the deploy script (for orchestration) **and** the SIGTERM handler (for process-level drain). Neither alone is sufficient.
 
 ### 20.12 Scalability Summary (2K+ Concurrent)
 
 | Component | Limit without mitigation | Mitigation in this stack | Headroom |
 |---|---|---|---|
 | Bun + Elysia | ~100K req/s | — | Ample |
-| Postgres (raw connections) | ~100 concurrent | PgBouncer transaction mode | 2K+ app conns → ~50 Postgres conns |
+| Postgres (raw connections) | ~100 concurrent | PgBouncer transaction mode | 2K+ API conns → ~50 Postgres conns |
 | Drizzle pool per instance | Unbounded (risk) | `DB_POOL_MAX=20` per instance | Controlled |
 | Redis | ~100K ops/s | — | Ample |
 | Hot reads hitting Postgres | Collapses under load | Redis query cache (§20.6) | 80–95% cache hit rate on master data |
 | Single instance CPU | Saturation at ~5K concurrent | Nginx `least_conn` upstream + horizontal scale | Linear scale-out |
 | Response payload size | Bandwidth waste | Nginx Brotli compression (§19) | 15–25% smaller payloads |
 
-A single well-provisioned instance (4 vCPU, 8GB RAM) with this configuration comfortably handles 2K concurrent. For >5K concurrent or zero-downtime deploys, add a second app instance — Nginx's `least_conn` upstream handles distribution automatically with no code changes.
+A single well-provisioned API instance (4 vCPU, 8GB RAM) with this configuration comfortably handles 2K concurrent. For >5K concurrent or zero-downtime deploys, add a second API instance and scale workers separately — Nginx's `least_conn` upstream handles API distribution automatically with no code changes.
 
 ---
 
@@ -665,27 +787,28 @@ The infrastructure is designed to scale from 100 to 100K concurrent without arch
 
 | Component | Specification | Count | Purpose |
 |---|---|---|---|
-| All services | 2 vCPU / 4GB | 1 | Nginx, Elysia app, PgBouncer, PostgreSQL, Redis co-located on single VM |
+| All services | 2 vCPU / 4GB | 1 | Nginx, Elysia API, PgBouncer, PostgreSQL, Redis co-located on single VM |
 | **Total** | 2 vCPU / 4GB | 1 VM | |
 
 **Orchestration:** Docker Compose, single VM. All services run on one host — suitable for MVP, prototypes, and early customer validation.
 
 **Estimated cost (DigitalOcean / Vultr):** **$20–$50 USD/month** (~Rp 320–800 ribu)
 
-**When to upgrade:** When a second app instance is needed for zero-downtime deploys, or when database read load requires a dedicated instance.
+**When to upgrade:** When a second API instance is needed for zero-downtime deploys, when workers need independent capacity, or when database read load requires a dedicated instance.
 
 #### Tier 1 — 2K Concurrent (Docker Compose)
 
 | Component | Specification | Count | Purpose |
 |---|---|---|---|
 | Nginx | 4 vCPU / 8GB | 1 | Load balancer, Brotli, TLS termination |
-| Elysia app | 4 vCPU / 8GB | 1–2 | API server |
+| Elysia API | 4 vCPU / 8GB | 1–2 | API server |
+| BullMQ worker | 2–4 vCPU / 4–8GB | 1–2 | Async job processing |
 | PgBouncer | co-located | 1 | Connection pooling |
 | PostgreSQL | 8 vCPU / 32GB SSD | 1 | Primary database |
 | Redis | 2 vCPU / 4GB | 1 | Caching, rate limiting, BullMQ |
 | **Total** | ~22–44 vCPU / 84–168GB | ~5–7 VMs | |
 
-**Orchestration:** Docker Compose. Scale with `docker compose up -d --scale app=2`.
+**Orchestration:** Docker Compose. Scale with `docker compose up -d --scale api=2 --scale worker=2`.
 
 **Estimated cost (DigitalOcean / Vultr):** **$200–$400 USD/month** (~Rp 3.2–6.4 juta)
 
@@ -694,8 +817,8 @@ The infrastructure is designed to scale from 100 to 100K concurrent without arch
 ```mermaid
 flowchart LR
     subgraph Callers
-        M[Mobile App<br/>Eden Treaty]
-        W[Web App<br/>Eden Treaty]
+        M[Mobile App<br/>OpenAPI Client]
+        W[Web Dashboard<br/>OpenAPI Client]
         P[3rd-Party Provider<br/>Webhook]
     end
 
@@ -715,7 +838,7 @@ flowchart LR
 
     subgraph Data
         PGB[PgBouncer<br/>transaction mode]
-        DB[(PostgreSQL<br/>+ RLS)]
+        DB[(PostgreSQL<br/>Tenant-scoped tables)]
         RC[(Redis<br/>Cache · Rate Limit)]
         S3[Cloudflare R2<br/>File Storage]
     end
@@ -733,11 +856,13 @@ flowchart LR
 | Component | Specification | Count |
 |---|---|---|
 | Nginx | 8 vCPU / 16GB | 2 |
-| Elysia app | 4 vCPU / 8GB | 4–6 |
+| Elysia API | 4 vCPU / 8GB | 4–6 |
+| BullMQ workers | 4 vCPU / 8GB | 2–4 |
 | PgBouncer | 2 vCPU / 4GB | 1 |
 | PostgreSQL primary | 16 vCPU / 64GB NVMe | 1 |
 | PostgreSQL read replica | 8 vCPU / 32GB | 1–2 |
 | Redis | 4 vCPU / 8GB | 1 |
+| OpenTelemetry + Grafana stack | workload-specific | 1 set |
 | **Total** | ~70–100 vCPU | ~10–13 VMs |
 
 **Orchestration:** Docker Compose with manual scale, or K3s lightweight Kubernetes.
@@ -749,12 +874,13 @@ flowchart LR
 | Component | Specification | Count |
 |---|---|---|
 | Nginx (edge) | 8 vCPU / 16GB | 2 |
-| Elysia app (K8s pods with HPA) | 4 vCPU / 8GB | 6–12 |
+| Elysia API (K8s pods with HPA) | 4 vCPU / 8GB | 6–12 |
 | PgBouncer | 2 vCPU / 4GB | 2 |
 | PostgreSQL primary | 32 vCPU / 128GB NVMe | 1 |
 | PostgreSQL read replica | 16 vCPU / 64GB | 3 |
 | Redis Cluster (3 master + 3 replica) | 4 vCPU / 16GB | 6 |
 | BullMQ workers (K8s) | 4 vCPU / 8GB | 3–5 |
+| OpenTelemetry + Grafana stack | workload-specific | 1 set |
 | **Total** | ~150–220 vCPU / 620–760GB | ~23–30 VMs |
 
 **Estimated cost:** **$4,500–$8,000 USD/month** (~Rp 72–128 juta)
@@ -768,7 +894,7 @@ Cloudflare Business Plan: **+$200 USD/month**. ROI is highest at scale — absor
 | Concurrency | Primary cost driver | Scaling mechanism |
 |---|---|---|
 | 2K → 10K | Database (read replicas, NVMe) | Add read replicas, PgBouncer pool size |
-| 10K → 100K | App instances + Redis Cluster | K8s HPA, Redis Cluster sharding |
+| 10K → 100K | API instances, workers, and Redis Cluster | K8s HPA, independent worker scale, Redis Cluster sharding |
 | 100K+ | Multi-region, CDN edge | Geo-distributed deployment |
 
 ---
@@ -850,6 +976,36 @@ spec:
               memory: "1Gi"
 ```
 
+Workers use the same image and the same deployment invariants, but with a worker command and worker-specific probes/resources:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    spec:
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: worker
+          image: registry/example-api:${TAG}
+          command: ["bun", "run", "worker"]
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+```
+
 #### Horizontal Pod Autoscaler (HPA)
 
 ```yaml
@@ -911,7 +1067,7 @@ The application code does not change — `ioredis` handles both single-node and 
 *    hard    nofile    500000
 ```
 
-This is required on every host running app containers. Without it, the OS will refuse new connections at ~1,024 concurrent connections.
+This is required on every host running API containers. Without it, the OS will refuse new connections at ~1,024 concurrent connections.
 
 #### What changes from Tier 1 to Tier 3
 
@@ -920,10 +1076,10 @@ This is required on every host running app containers. Without it, the OS will r
 | Config | All params in `.env` | K8s ConfigMaps/Secrets replace `.env` with no code change |
 | DB connection | `DATABASE_URL` → PgBouncer | Adding read replicas = changing one env var |
 | Redis | Single node URL | Redis Cluster URL is the same format — `ioredis` handles both |
-| App instances | `docker compose scale app=2` | K8s HPA scales pods automatically on CPU/request metrics |
-| Nginx upstream | One `server app:3000` line | Add replica entries; `least_conn` already configured |
+| API instances | `docker compose up -d --scale api=2` | K8s HPA scales pods automatically on CPU/request metrics |
+| Nginx upstream | One `server api:3000` line | Add replica entries; `least_conn` already configured |
 | Health checks | `/health` + `/ready` endpoints | K8s liveness + readiness probes use these directly |
-| Graceful shutdown | SIGTERM handler in app | K8s sends SIGTERM on pod eviction — already handled |
+| Graceful shutdown | SIGTERM handler in API and worker | K8s sends SIGTERM on pod eviction — already handled |
 
 #### Tier 3 Architecture — Mermaid Diagram
 
@@ -938,7 +1094,7 @@ flowchart TD
         N2[Nginx 2<br/>8 vCPU / 16GB]
     end
     
-    subgraph App["App Layer — K8s HPA (auto-scales 6–12 pods)"]
+    subgraph App["API Layer — K8s HPA (auto-scales 6–12 pods)"]
         A1[Elysia<br/>4 vCPU / 8GB]
         A2[Elysia<br/>4 vCPU / 8GB]
         A3[Elysia ×4–10<br/>4 vCPU / 8GB]
@@ -963,6 +1119,14 @@ flowchart TD
     subgraph Workers["BullMQ Workers (K8s, scaled independently)"]
         W1[Worker ×3–5<br/>4 vCPU / 8GB]
     end
+
+    subgraph Obs["Observability"]
+        OTEL[otel-collector]
+        PROM[prometheus]
+        LOKI[loki]
+        TEMPO[tempo]
+        GRAF[grafana]
+    end
     
     CF --> N1 & N2
     N1 & N2 -->|least_conn| A1 & A2 & A3
@@ -970,7 +1134,12 @@ flowchart TD
     PB1 & PB2 --> PG1
     PB1 & PB2 -->|reads| PG2
     A1 & A2 & A3 --> R1 & R2 & R3
-    A1 & A2 & A3 --> W1
+    R1 & R2 & R3 --> W1
+    W1 --> PB1 & PB2
+    A1 & A2 & A3 --> OTEL
+    W1 --> OTEL
+    OTEL --> PROM & LOKI & TEMPO
+    PROM & LOKI & TEMPO --> GRAF
 ```
 
 ---

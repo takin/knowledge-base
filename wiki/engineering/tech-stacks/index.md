@@ -2,19 +2,20 @@
 
 Updated: 2026-05-22
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15)
-Raw: [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
+Raw: [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md); [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
 
 Generic, reusable engineering standards for application stacks. Stack names encode platform plus runtime or framework identity so current standards can coexist with future alternatives.
 
 | Stack | Platform | Runtime | Framework / Core Tools | Status | Article |
 | --- | --- | --- | --- | --- | --- |
-| Web: React + TanStack Start | Web / frontend-owned or fullstack | Bun | React + TanStack Start | Current draft standard | [web-react-tanstack-start.md](web-react-tanstack-start.md) |
-| Backend: Bun + Elysia | Backend API | Bun | Elysia | Current draft standard | [backend-bun-elysia.md](backend-bun-elysia.md) |
-| Mobile: React Native + Expo | Mobile | Expo / JavaScript | React Native + Expo Router | Current draft standard | [mobile-react-native-expo.md](mobile-react-native-expo.md) |
-| Infrastructure: Docker Compose + Nginx | Infrastructure | Docker | Docker Compose + Nginx | Current draft standard | [infra-docker-compose-nginx.md](infra-docker-compose-nginx.md) |
-| Security Baseline: Web Applications | Cross-stack security | N/A | CSP, CSRF, XSS, rate limiting, dependency security | Current draft standard | [security-web-app-baseline.md](security-web-app-baseline.md) |
-| CI and Testing: TypeScript + React | Delivery / quality | Bun | ESLint, TypeScript, Vitest, Playwright, React Doctor | Current draft standard | [ci-testing-typescript-react.md](ci-testing-typescript-react.md) |
+| Web: Astro Landing | Public marketing / SEO landing | Bun | Astro + MDX + Tailwind + Cloudflare Pages | Current landing standard | [web-astro-landing.md](web-astro-landing.md) |
+| Web: React + Vite Dashboard | Authenticated SaaS dashboard / API-only SPA | Bun | React 19 + Vite + React Compiler + Oxlint/Oxfmt + TanStack Router/Query/Form/Table + Shadcn + OpenAPI client + Docker Compose + Nginx static runtime + Let's Encrypt | Current dashboard standard | [web-react-vite-dashboard.md](web-react-vite-dashboard.md) |
+| Backend: Bun + Elysia | Backend API | Bun | Elysia, OpenAPI 3.1, JWT/JWKS, RBAC, Drizzle, PgBouncer, Redis, BullMQ, OpenTelemetry, Docker Compose | Current backend API standard | [backend-bun-elysia.md](backend-bun-elysia.md) |
+| Mobile: React Native + Expo | Mobile | Expo / JavaScript | React Native, Expo Router, NativeWind, TanStack Query/Form, OpenAPI client, secure token storage, Maestro | Current draft standard | [mobile-react-native-expo.md](mobile-react-native-expo.md) |
+| Infrastructure: Docker Compose + Nginx | Infrastructure | Docker | Docker Compose, Nginx API gateway/static dashboard runtime, Vault, PgBouncer, Redis, Grafana stack, Kubernetes tier | Current draft standard | [infra-docker-compose-nginx.md](infra-docker-compose-nginx.md) |
+| Security Baseline: Web Applications | Cross-stack security | N/A | CSP for HTML, CSRF/CORS, JWT/JWKS, XSS, rate limiting, queue security, source maps, observability security, dependency security | Current draft standard | [security-web-app-baseline.md](security-web-app-baseline.md) |
+| CI and Testing: TypeScript + React | Delivery / quality | Bun | Oxlint, Oxfmt, TypeScript, Vitest, Playwright, React Doctor, React Compiler, backend API checks | Current draft standard | [ci-testing-typescript-react.md](ci-testing-typescript-react.md) |
 | Agent Skills: TypeScript Product Development | AI implementation workflow | N/A | Required coding-agent skills by stack | Current draft standard | [agent-skills-typescript-product.md](agent-skills-typescript-product.md) |
 
 ## Future Stack Naming Examples

@@ -2,60 +2,51 @@
 
 Updated: 2026-05-22
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
 Platform: Delivery / quality
 Runtime: Bun
 Framework: TypeScript + React
-Primary Use Case: Linting, type checking, unit/integration/component/E2E tests, React diagnostics, and GitHub Actions pipelines
-Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md)
+Primary Use Case: Oxc linting/formatting, type checking, unit/integration/component/E2E tests, React diagnostics, React Compiler checks, bundle budgets, static artifact scans, and GitHub Actions pipelines
+Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
 
 ## Summary
 
-This stack defines the quality gates for TypeScript React products: ESLint, strict TypeScript, Vitest, Testing Library, Playwright, React Doctor, dependency audit, Docker build, and staged deployment checks.
+This stack defines quality gates for TypeScript React products. New dashboard projects use Oxlint, Oxfmt, strict TypeScript, Vitest, Testing Library, Playwright, React Doctor, React Compiler diagnostics, dependency audit, bundle analysis, Docker build, and static artifact scans.
 
-## Standard
+## Linting And Formatting
 
-## 15. Code Quality
+- Oxlint is the default linter for new TypeScript + React dashboard projects.
+- Oxfmt is the default formatter for new TypeScript + React dashboard projects.
+- ESLint is not the default linter for new dashboard projects. Add it only as a targeted exception when Oxlint cannot cover a concrete risk.
+- Prettier and Biome are not the default formatter for new dashboard projects.
+- Oxfmt formatting must be checked with `oxfmt --check`.
+- Oxlint does not replace TypeScript typechecking; `tsc --noEmit` remains mandatory.
 
-### 15.1 Linting: ESLint
+## TypeScript
 
-- ESLint with TypeScript support (`@typescript-eslint`) is mandatory.
-- Extend from the project's shared ESLint config. Do not configure per-file exceptions without a comment explaining why.
-- Lint runs in CI on every pull request. A failing lint check blocks merge.
-
-### 15.2 TypeScript
-
-- **Strict mode** is mandatory (`"strict": true` in `tsconfig.json`).
-- No `any` types without an inline `// eslint-disable-next-line` comment and a short explanation.
+- Strict mode is mandatory.
+- No `any` types without an inline lint suppression comment and a short explanation.
 - Prefer `unknown` over `any` when the type is genuinely unknown.
-- All server function inputs and outputs are typed via Zod inference (`z.infer<typeof schema>`).
+- Backend API boundaries are typed through route schemas and generated OpenAPI clients. Dashboard-only code must not define server functions.
 
-### 15.3 Testing
+## Testing
 
 | Layer | Tool | Scope |
-|---|---|---|
-| Unit / integration | **Vitest** | Pure functions, Zod schemas, server function logic, Zustand stores |
-| Component | **Vitest + Testing Library** | Shadcn/custom component rendering and interaction |
-| End-to-end | **Playwright** | Critical user flows (auth, onboarding, core feature happy path) |
-| React health scan | **React Doctor** | React correctness, performance, security, and architecture diagnostics |
+| --- | --- | --- |
+| Unit / integration | Vitest | Pure functions, schemas, backend services/controllers where present, stores |
+| Component | Vitest + Testing Library | Shadcn/custom component rendering and interaction |
+| End-to-end | Playwright | Auth, onboarding, core feature happy path, destructive/payment flows |
+| React health scan | React Doctor | React correctness, performance, security, and architecture diagnostics |
+| Bundle analysis | Project-approved Vite bundle analyzer or size-limit check | Initial app shell, route chunks, dependency growth |
 
-Rules:
-- Every server function must have at least one integration test hitting a real (test) database — no mocks of database calls.
-- E2E tests cover: login/logout, the single most important user action per product, and any flow that handles money or data loss.
-- Test files live in `__tests__/` adjacent to the code they test, or in a top-level `tests/` folder for E2E.
+## React Doctor
 
-### 15.4 React Doctor
+React Doctor complements Oxlint, TypeScript, Vitest, Testing Library, and Playwright with React-specific diagnostics.
 
-**React Doctor** is mandatory for all React frontend and fullstack applications.
-
-React Doctor complements ESLint, TypeScript, Vitest, Testing Library, and Playwright with React-specific diagnostics. It is used to catch correctness, performance, security, and architecture issues that generic linting and tests may miss.
-
-Rules:
-- React Doctor runs in CI on every pull request that touches React/frontend code.
+- React Doctor runs in CI on every PR that touches React/frontend code.
 - Error-level diagnostics block merge.
-- Warning-level diagnostics must be reviewed and may be tracked as improvement backlog, but they do not block early product development unless explicitly promoted later.
 - Release candidates must pass a full React Doctor scan.
-- Use Bun-first commands; do not use `npx`, `npm`, `yarn`, or `pnpm`.
+- Use Bun-first commands.
 
 Recommended PR/CI command:
 
@@ -69,41 +60,56 @@ Recommended release-candidate command:
 bunx --bun react-doctor@latest . --yes --full --fail-on error --offline
 ```
 
-Recommended changed-files command when a repository supports base-branch diffing:
+## React Compiler CI
 
-```bash
-bunx --bun react-doctor@latest . --diff main --fail-on error --offline --annotations
-```
+React Compiler is mandatory for dashboard production builds.
 
----
+- Production build must run with React Compiler enabled.
+- CI must fail if the configured build fails because of React Compiler critical diagnostics.
+- Do not silence compiler diagnostics without an ADR explaining the unsafe pattern and remediation plan.
+- Avoid adding `useMemo`, `useCallback`, or `React.memo` as a reflexive fix. Prefer pure, compiler-friendly code first.
 
-## 16. CI/CD
+## Bundle, Source Map, And Static Artifact Checks
 
-**GitHub Actions** is the mandatory CI/CD platform.
+- CI should fail or warn when the authenticated dashboard shell exceeds the project budget.
+- Bundle analysis must identify top dependency contributors when bundle size changes materially.
+- Static production artifacts must not include public `.map` files unless a security exception explicitly allows them.
+- If source maps are needed for monitoring, CI uploads them privately to the monitoring provider and removes them from served assets.
+- CI must verify the Docker image does not contain `.env`, `.git`, test reports, coverage, Playwright artifacts, local caches, or dependency install caches.
 
-### 16.1 Pull Request pipeline (runs on every PR)
+## Pull Request Pipeline
 
-1. `bun install` — install dependencies
-2. ESLint — lint check
-3. TypeScript — type check (`tsc --noEmit`)
-4. React Doctor — React frontend health scan
-5. `bun audit` — dependency vulnerability scan
-6. TanStack supply-chain guard — fail on affected `@tanstack/*` versions and advisory indicators (§12.8.1)
-7. Vitest — unit and integration tests
-8. Docker build — verify the image builds without error
+1. `bun install`.
+2. Oxfmt formatting check: `oxfmt --check`.
+3. Oxlint lint check.
+4. TypeScript type check: `tsc --noEmit`.
+5. React Compiler production build diagnostics.
+6. React Doctor frontend health scan.
+7. `bun audit` dependency vulnerability scan.
+8. TanStack supply-chain guard for affected `@tanstack/*` versions and advisory indicators.
+9. Vitest unit and integration tests.
+10. Bundle budget or bundle analysis for frontend changes.
+11. Docker build.
+12. Static artifact scan for source maps, secrets, source control metadata, reports, coverage, Playwright artifacts, and caches.
 
-### 16.2 Merge to `main` pipeline
+When a repository includes a standalone backend API, CI also runs backend checks from [Backend: Bun + Elysia](backend-bun-elysia.md): OpenAPI generation/drift, JWT/JWKS auth tests, RBAC/scope tests, tenant isolation tests, rate limit tests, idempotency tests, CORS/cookie/CSRF tests where applicable, webhook tests, worker/queue retry tests, and API/worker Docker smoke tests.
 
-1. All PR checks (above)
-2. Playwright E2E tests
-3. Docker image build and push to registry
-4. Deploy to staging environment
+## Merge To Main Pipeline
 
-### 16.3 Rules
+1. All PR checks.
+2. Playwright E2E tests.
+3. Docker image build and push to registry.
+4. Deploy to staging environment.
 
-- All secrets used in Actions are stored as **GitHub Actions Secrets**, never in workflow YAML.
+## Rules
+
+- All secrets used in Actions are stored as GitHub Actions Secrets, never in workflow YAML.
 - Production deployments require a passing staging deployment as a prerequisite.
-- Do not use `--force` pushes to `main` or `production` branches.
+- Do not use force pushes to `main` or `production` branches.
 - During active supply-chain incidents, CI may temporarily use `bun install --ignore-scripts`; document the incident link and restore normal installs after provenance review.
 
----
+## See Also
+
+- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [Security Baseline: Web Applications](security-web-app-baseline.md)
+- [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)

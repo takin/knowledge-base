@@ -16,13 +16,13 @@ Specific mappings:
 
 | Web standard | Mobile equivalent |
 |---|---|
-| TanStack Start | Expo Router (file-based routing) |
+| Web routing | Expo Router (file-based routing) |
 | TanStack Query | TanStack Query (same library, React Native compatible) |
 | TanStack Form + Zod | TanStack Form + Zod (same) |
 | Zustand | Zustand (same) |
 | Tailwind CSS v4 | **NativeWind v4** (Tailwind for React Native) |
 | Shadcn UI | **Shadcn/RN** — community port of Shadcn components for React Native, built on NativeWind v4 and Radix primitives adapted for mobile. Pull from the shared internal Shadcn preset repo as the baseline. |
-| Better Auth | Better Auth client (same client library, React Native compatible) |
+| Backend auth | JWT access tokens, refresh rotation, OpenAPI-generated API client, and secure native token storage |
 | Sentry | `@sentry/react-native` (same optional/runtime-toggle pattern) |
 | Vitest + Playwright | Vitest + Maestro (E2E for mobile) |
 | BunJS runtime | Not applicable — Expo/Metro handles the mobile bundle |
@@ -35,6 +35,8 @@ Rules:
 - Dark/Light mode is mandatory on mobile (use Expo's `useColorScheme` + NativeWind's `dark:` variant).
 - The `"use client"` directive rule does not apply to React Native.
 - No `useEffect` for data fetching on mobile — same policy as web.
+- The OpenAPI-generated mobile API client must be regenerated or checked in CI whenever the backend OpenAPI contract changes.
+- Mobile client generation uses a committed/CI-generated OpenAPI artifact or an authenticated docs-enabled environment, not unauthenticated production `/docs/json`.
 - Design tokens (colors, spacing, typography) are shared from the same source as the web product. In a monorepo, the `packages/ui/` shared package exports the token definitions used by both web (Tailwind CSS variables) and mobile (NativeWind CSS variables).
 - NativeWind v4 requires the Babel preset — ensure `babel.config.js` is configured per the NativeWind v4 setup guide.
 - Do not use React Native's `StyleSheet.create()` for product UI — use NativeWind utility classes. `StyleSheet` is permitted only for performance-critical animations or third-party library integration.

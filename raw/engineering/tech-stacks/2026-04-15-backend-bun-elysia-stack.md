@@ -3,8 +3,9 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
+Updated: 2026-05-22
 Status: Draft
-Scope: Standalone Bun + Elysia backend APIs, webhooks, and async services
+Scope: Standalone Bun + Elysia backend APIs, SaaS dashboards, mobile APIs, public APIs, webhooks, async workers, and self-hosted VPS deployments
 
 ---
 
@@ -15,41 +16,62 @@ Scope: Standalone Bun + Elysia backend APIs, webhooks, and async services
 **Elysia** is the mandatory HTTP framework for standalone backend API servers.
 
 Use Elysia-first architecture when one or more of these are true:
-- the product depends on long-lived SSE connections as a core interaction model
-- the product coordinates external connectors/sessions that maintain in-memory runtime state
-- the product is webhook-heavy and async-job-heavy enough that a dedicated backend is operationally cleaner than server functions
-- the product must expose a separately deployable backend surface to mobile apps or third-party systems
+- the product exposes a separate backend API to a Vite dashboard, mobile app, machine client, or third-party system
+- the product needs a public or partner-facing API surface
+- the product uses webhooks, queues, media processing, push notifications, or long-running async services
+- the product needs realtime server-to-client updates such as notifications or job progress
+- the backend must be independently deployable and observable on a VPS
 
-Elysia is built specifically for Bun. It is the fastest TypeScript HTTP framework in the Bun ecosystem and ships **Eden Treaty** — a type-safe RPC client generated directly from the Elysia server type definition. Mobile and web clients import the Eden Treaty client and get full end-to-end TypeScript types without a separate schema, codegen step, or GraphQL overhead.
+Do not use Express, Hono, Fastify, Koa, NestJS, Next.js route handlers, or frontend server functions for standalone API projects adopting this stack.
 
-```typescript
-// server — src/index.ts
-const app = new Elysia()
-  .get('/users/:id', ({ params }) => getUserById(params.id))
-  .post('/orders', ({ body }) => createOrder(body), {
-    body: t.Object({ productId: t.String(), qty: t.Number() })
-  })
-export type App = typeof app
+### 20.2 Product Profiles
 
-// mobile/web client — no codegen needed
-import { treaty } from '@elysiajs/eden'
-import type { App } from '@app/api'
-const client = treaty<App>(process.env.API_URL)
-const { data, error } = await client.users({ id: '123' }).get()
-// data and error are fully typed
+Backend projects use one of two profiles at project initialization. The framework, directory layout, deployment model, and core libraries are the same; defaults differ by consumer type.
+
+| Profile | Consumer | Default posture |
+|---|---|---|
+| `internal-api` | Dashboard, mobile app, internal operators, first-party machine clients | User JWT, workspace RBAC, internal docs, faster breaking-change cadence |
+| `public-api` | External developers, partners, customer systems, public machine clients | API clients, scopes, stable versioning, stricter rate limits, deprecation windows, customer webhooks |
+
+Rules:
+- A single backend project is initialized as either internal or public, not both by default.
+- Both profiles expose REST JSON APIs under `/api/v1`.
+- Both profiles generate OpenAPI 3.1 specs.
+- Both profiles use JWT, JWKS, RBAC, scopes, Redis, BullMQ, PostgreSQL, Drizzle, Pino, OpenTelemetry, and Docker Compose.
+- Public API projects must treat the API contract as long-lived and externally consumed.
+
+### 20.3 Architecture Overview
+
+```mermaid
+flowchart LR
+    Client[Dashboard / Mobile / M2M / Public Client] --> Nginx[Nginx TLS Gateway]
+    Nginx --> API[Elysia API]
+    API --> PgBouncer[PgBouncer]
+    PgBouncer --> Postgres[(PostgreSQL)]
+    API --> Redis[(Redis)]
+    API --> Queue[BullMQ Queues]
+    Queue --> Worker[BullMQ Worker]
+    Worker --> PgBouncer
+    Worker --> Redis
+    Worker --> Storage[S3-Compatible Object Storage]
+    API --> Storage
+    API --> OTel[OpenTelemetry Collector]
+    Worker --> OTel
+    OTel --> Grafana[Grafana Stack]
 ```
 
-Do not use Express, Hono, Fastify, or Koa.
+Rules:
+- Nginx is the only host-facing service in staging and production.
+- The API container exposes its port only inside the Docker network.
+- Workers are separate runtime processes from the API server.
+- Redis and BullMQ are mandatory from day one.
+- Object storage is mandatory for media-capable products; never store file blobs in PostgreSQL.
 
-### 20.2 API design
+### 20.4 API Design: REST + OpenAPI
 
-**Style:** RESTful with an OpenAPI 3.1 spec generated automatically by Elysia's `@elysiajs/openapi` plugin.
+**Style:** RESTful JSON APIs with OpenAPI 3.1 generated automatically by Elysia's `@elysiajs/openapi` plugin.
 
-> **Note:** `@elysiajs/swagger` is deprecated and no longer maintained. Use `@elysiajs/openapi` instead — it ships Scalar UI by default and has a cleaner API.
-
-**Versioning:** URL-prefix versioning (`/api/v1/`, `/api/v2/`). Never version via headers or query params.
-
-**API documentation setup:**
+OpenAPI is the official contract for dashboards, mobile apps, public SDKs, third-party clients, and CI drift checks. Eden Treaty is allowed only for internal TypeScript-only tooling and must not be the official public or dashboard contract.
 
 Install:
 
@@ -57,38 +79,29 @@ Install:
 bun add @elysiajs/openapi
 ```
 
-Mount the plugin at the top of the app, before any routes:
+Recommended setup:
 
 ```typescript
 import { Elysia } from 'elysia'
 import { openapi } from '@elysiajs/openapi'
 
-new Elysia()
+export const app = new Elysia()
   .use(
     openapi({
-      path: '/docs',                        // serves Scalar UI at /docs
+      enabled: process.env.API_DOCS_ENABLED === 'true',
+      path: '/docs',
       documentation: {
         info: {
           title: 'Example API',
           version: '1.0.0',
-          description: 'Internal REST API for an example product phase'
+          description: 'REST API for an example SaaS product'
         },
-        tags: [
-          { name: 'Auth',          description: 'Session management' },
-          { name: 'Workspace',     description: 'Tenant workspace operations' },
-          { name: 'Contact',       description: 'Recipient contact management' },
-          { name: 'Blast',         description: 'Blast creation and execution' },
-          { name: 'Invoice',       description: 'Invoice lifecycle and PDF' },
-          { name: 'Disbursement',  description: 'Payment and settlement tracking' },
-          { name: 'Webhook',       description: 'Inbound Xendit and Meta webhooks' },
-        ],
         components: {
           securitySchemes: {
-            sessionCookie: {
-              type: 'apiKey',
-              in: 'cookie',
-              name: 'better_auth_session',   // match Better Auth session cookie name
-              description: 'Better Auth session cookie (HttpOnly)'
+            bearerAuth: {
+              type: 'http',
+              scheme: 'bearer',
+              bearerFormat: 'JWT'
             }
           }
         }
@@ -97,578 +110,1662 @@ new Elysia()
   )
 ```
 
-Docs UI is at `/docs`. Raw OpenAPI JSON spec is at `/docs/json`.
+Rules:
+- Use `@elysiajs/openapi`, not deprecated Swagger plugins.
+- Mount Scalar UI at `/docs`.
+- Raw OpenAPI JSON is exposed at `/docs/json` when docs are enabled.
+- Disable or auth-gate `/docs` and `/docs/json` in production.
+- Version APIs by URL prefix: `/api/v1`, `/api/v2`.
+- Never version APIs by header or query parameter.
+- Health, readiness, metrics, admin, and internal worker endpoints must be hidden from consumer OpenAPI specs unless explicitly intended.
+- Every controller group defines OpenAPI tags and security metadata.
 
-**Tagging routes:**
+OpenAPI client contract:
 
-Assign a tag to a single route via `detail`:
-
-```typescript
-.get('/workspaces', listWorkspaces, {
-  detail: { tags: ['Workspace'], summary: 'List all workspaces for the authenticated tenant' }
-})
+```mermaid
+flowchart LR
+    API[Elysia Routes + Schemas] --> OpenAPI[OpenAPI 3.1 /docs/json]
+    OpenAPI --> CI[CI Drift Check]
+    OpenAPI --> Gen[Client Generator]
+    Gen --> Dashboard[Dashboard src/lib/api/generated]
+    Gen --> Mobile[Mobile API Client]
+    Gen --> PublicSDK[External SDK / Docs]
+    Dashboard --> Wrapper[Handwritten API Wrapper]
+    Wrapper --> Features[Feature Code via TanStack Query]
 ```
 
-Apply tags to an entire controller group using instance-level `detail`:
+#### 20.4.1 API Versioning And Deprecation
 
-```typescript
-export const workspaceController = new Elysia({
-  prefix: '/workspaces',
-  detail: {
-    tags: ['Workspace'],
-    security: [{ sessionCookie: [] }]   // marks all routes as requiring session cookie
-  }
-})
-```
+API versioning uses URL path prefixes only.
 
-**Hiding internal or sensitive routes:**
+Rules:
+- Use `/api/v1`, `/api/v2`, and later version prefixes.
+- Do not version APIs by header, query parameter, hostname, or content negotiation.
+- Internal API projects may ship breaking changes faster, but generated dashboard/mobile clients must be updated in the same change set.
+- Public API projects must treat every documented endpoint, request schema, response schema, error code, and webhook payload as externally consumed.
+- Public API breaking changes require a new version prefix unless an explicit customer migration plan is approved.
+- Non-breaking changes include adding optional request fields, adding response fields, adding new endpoints, adding enum values only when clients are documented to tolerate unknown values, and increasing documented limits.
+- Breaking changes include removing fields, renaming fields, changing field types, making optional fields required, removing enum values, changing auth/scopes, changing pagination semantics, or changing error codes for the same failure mode.
 
-Webhook endpoints and internal-only routes should be excluded from the public spec:
+Public API deprecation lifecycle:
+- Announce deprecations in docs and changelog before enforcement.
+- Return `Deprecation` and `Sunset` headers for deprecated public endpoints when practical.
+- Keep old public API versions available for the product-defined migration window.
+- The default public API migration window is 90 days unless the project ADR defines a stricter or longer period.
+- Emergency security removals may bypass the migration window, but require an incident note and customer communication.
 
-```typescript
-.post('/webhooks/xendit', handleXendit, {
-  detail: { hide: true }
-})
-```
+OpenAPI drift rules:
+- CI generates the OpenAPI spec from Elysia routes.
+- CI compares the generated spec against the committed or published contract.
+- Public API CI blocks accidental breaking changes.
+- Internal API CI blocks dashboard/mobile client drift.
+- Every public API change updates docs, examples, and SDK generation inputs in the same PR.
 
-Health check endpoints (`/health`, `/ready`) should also be hidden — they are not consumer API surface.
+### 20.5 Response Envelope And Error Registry
 
-**Access control in production:**
+All API responses use a standard envelope.
 
-The `/docs` and `/docs/json` endpoints should be disabled or access-controlled in production. Mount the plugin conditionally:
+Success:
 
-```typescript
-.use(
-  openapi({
-    enabled: process.env.APP_ENV !== 'production',
-    path: '/docs',
-    // ... rest of config
-  })
-)
-```
-
-Alternatively, gate the docs path behind an admin-only middleware and leave `enabled: true` in all environments for internal use.
-
-**Env var:**
-
-```env
-API_DOCS_ENABLED=true   # false in production (or gate behind auth middleware)
-```
-
-**Rules:**
-- Use `@elysiajs/openapi`, not the deprecated `@elysiajs/swagger`.
-- Mount at `/docs` (not the default `/openapi`) to avoid path collision with OpenAPI spec tooling.
-- Every resource group gets its own tag — makes the Scalar UI navigable.
-- All protected routes explicitly declare `security: [{ sessionCookie: [] }]` at the controller level, not per-route.
-- Webhook handlers always use `detail: { hide: true }` — they are not consumer-facing API.
-- Health check endpoints (`/health`, `/ready`) always hidden.
-- Disable or auth-gate `/docs` in production.
-
-**Consistent response envelope:**
-
-All API responses use a standard envelope. This makes client error handling predictable across all products.
-
-```typescript
-// success
+```json
 {
   "success": true,
-  "data": { ... },
-  "meta": {                    // present only on paginated responses
+  "data": {},
+  "meta": {
     "page": 1,
     "pageSize": 20,
     "total": 450,
     "totalPages": 23
   }
 }
+```
 
-// error
+Error:
+
+```json
 {
   "success": false,
   "error": {
-    "code": "VALIDATION_ERROR",   // machine-readable constant, never changes
-    "message": "...",             // human-readable, may change
-    "details": [                  // field-level errors from Zod, optional
+    "code": "VALIDATION_ERROR",
+    "message": "Please check the highlighted fields.",
+    "details": [
       { "field": "email", "message": "Invalid email address" }
     ]
   }
 }
 ```
 
-Error codes are `SCREAMING_SNAKE_CASE` constants defined in a shared `src/types/errors.ts`. Never return raw Zod error objects or Elysia internals to the client.
+Rules:
+- Error codes are stable `SCREAMING_SNAKE_CASE` constants defined in `src/types/errors.ts`.
+- Never return raw Elysia validation errors, Zod internals, SQL errors, stack traces, provider diagnostics, or exception messages to clients.
+- Field-level API errors map back to fields where possible.
+- Every response includes or is correlated with `X-Request-ID`.
+- Internal errors are logged with `request_id`, `trace_id`, safe error metadata, and no PII.
 
-**Pagination:** All list endpoints are paginated. Master data uses `?page=&pageSize=` (client controls). Transactional data uses cursor-based pagination (`?cursor=&limit=`) to avoid offset drift on fast-growing tables.
+#### 20.5.1 Error Code Registry
 
-### 20.3 Validation
+Error codes are part of the API contract. They must be stable, documented, and safe to expose.
 
-Elysia's built-in schema validation (based on TypeBox) handles request-level shape validation. **Zod** handles business-logic validation (cross-field rules, database constraint checks, domain rules).
+Baseline registry:
 
-Rule: TypeBox at the route boundary, Zod inside service functions. Never skip either layer.
+| HTTP status | Code | Meaning |
+|---|---|---|
+| `400` | `BAD_REQUEST` | Request is malformed or cannot be parsed safely |
+| `400` | `VALIDATION_ERROR` | Request shape is syntactically valid but fails schema/domain validation |
+| `401` | `UNAUTHENTICATED` | Missing, invalid, expired, or revoked credentials |
+| `403` | `FORBIDDEN` | Authenticated principal lacks required role, scope, workspace membership, or resource access |
+| `404` | `NOT_FOUND` | Resource does not exist or must be hidden from this principal |
+| `409` | `CONFLICT` | Request conflicts with current resource state or uniqueness constraints |
+| `409` | `IDEMPOTENCY_CONFLICT` | Same idempotency key was reused with a different request hash |
+| `413` | `PAYLOAD_TOO_LARGE` | Request body or declared upload exceeds configured limits |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | Content type is not accepted by the endpoint |
+| `422` | `UNPROCESSABLE_ENTITY` | Valid JSON cannot be processed because domain preconditions fail |
+| `429` | `RATE_LIMITED` | Request exceeded a configured rate limit policy |
+| `500` | `INTERNAL_ERROR` | Unexpected server failure |
+| `503` | `SERVICE_UNAVAILABLE` | Required dependency is unavailable or the service is temporarily unable to handle requests |
+| `503` | `SERVICE_SHUTTING_DOWN` | Process is draining and not accepting new work |
 
-### 20.4 Logging: Pino
+Rules:
+- Do not invent one-off error codes inside controllers.
+- Add new codes to `src/types/errors.ts` and public docs before using them.
+- Public API clients must be able to branch on `error.code` without parsing `message`.
+- Error `message` is human-readable but not a stable machine contract.
+- Use `details` for field-specific validation and structured retry hints.
+- Do not expose SQL constraint names, stack traces, provider raw errors, token parser internals, or authorization policy internals.
 
-**Pino** is the mandatory logger for all backend services.
+### 20.6 Authentication: JWT-First With JOSE
 
-- Structured JSON output — every log line is a parseable JSON object.
-- Log levels in order: `error`, `warn`, `info`, `debug`. Production runs at `info`; debug mode toggles via `LOG_LEVEL=debug` in `.env`.
-- Never log PII (email, phone, payment info). Scrub before logging.
-- Request logging uses `pino-http` middleware — logs method, path, status code, response time on every request. Sensitive headers (`Authorization`, `Cookie`) are redacted automatically.
+JWT is the standard authentication mechanism for dashboard, mobile, machine-to-machine, and public API access.
 
-```env
-LOG_LEVEL=info        # error | warn | info | debug
-LOG_PRETTY=false      # true for local dev (human-readable), false for production (JSON)
-```
+Use `jose` as the core JWT/JWK/JWKS implementation.
 
-### 20.5 Database connection: PgBouncer + Drizzle pool
+Rules:
+- Use asymmetric JWT signing in production.
+- Prefer `EdDSA` where runtime support is clean; use `RS256` as the compatibility fallback.
+- `HS256` is banned for production SaaS/public API JWTs unless an ADR explicitly approves it.
+- Every JWT includes a `kid` protected header.
+- Verify issuer, audience, expiration, signature, and required claims on every protected request.
+- Access tokens are short-lived.
+- User refresh tokens use rotation and revocation.
+- Machine tokens are scoped, revocable, and expire.
+- API keys are hashed at rest and shown only once at creation.
+- Do not store bearer access tokens in localStorage for dashboard apps unless a security ADR accepts the risk and mitigation.
 
-**This is the primary scalability control for 2K+ concurrent API calls.**
+#### 20.6.1 CORS, Cookies, And CSRF
 
-**PgBouncer runs in `transaction` mode.** This is the only mode that allows many application connections to share a small number of actual Postgres connections. Session mode and statement mode are banned.
+Backend APIs default to explicit origin allowlists and bearer-token authorization.
 
-In transaction mode: a Postgres connection is held only for the duration of a single transaction, then returned to the pool. 2,000 concurrent app connections can share ~50–100 real Postgres connections.
+CORS rules:
+- `CORS_ALLOWED_ORIGINS` is required for dashboard/mobile-web/browser clients.
+- Do not use wildcard `Access-Control-Allow-Origin: *` for authenticated APIs.
+- Never combine wildcard origins with credentials.
+- Allow only required methods and headers.
+- Include `Authorization`, `Content-Type`, `Idempotency-Key`, and `X-Request-ID` only when the API uses them.
+- Use `Access-Control-Max-Age` for preflight caching, but keep it short enough for configuration changes to propagate.
+- Production CORS origins must be exact origins, not broad domain suffixes.
+- Local development may allow `http://localhost:<port>` values from `.env` only.
 
-Each app instance configures Drizzle with a **bounded connection pool** to PgBouncer:
+Token transport rules:
+- Machine clients and public API clients use `Authorization: Bearer <token>` or hashed API keys where specified.
+- Dashboard and mobile clients should use short-lived bearer access tokens plus refresh rotation.
+- Do not store bearer access tokens in browser localStorage unless a security ADR explicitly accepts the risk.
+- If browser cookies are used for auth, they must be `HttpOnly`, `Secure` in non-local environments, and `SameSite=Lax` or `SameSite=Strict` unless an ADR approves `SameSite=None`.
 
-```typescript
-// src/lib/db.ts
-import { drizzle } from 'drizzle-orm/bun-sql'
-import { SQL } from 'bun'
+CSRF rules:
+- Bearer-token-only APIs that do not authenticate via ambient cookies do not require CSRF tokens.
+- Any endpoint authenticated by browser cookies must require CSRF protection for unsafe methods: `POST`, `PUT`, `PATCH`, and `DELETE`.
+- CSRF tokens must be bound to the session or refresh-token family and validated server-side.
+- CORS is not a CSRF defense.
+- SameSite cookies reduce CSRF risk but do not replace CSRF tokens for cookie-authenticated unsafe writes.
 
-const sql = new SQL({
-  url: process.env.DATABASE_URL,  // points to PgBouncer, not Postgres directly
-  max: Number(process.env.DB_POOL_MAX ?? 20),   // connections per instance to PgBouncer
-  idleTimeout: 30,
-  connectionTimeout: 10,
-})
-export const db = drizzle(sql)
-```
+Recommended user access token claims:
 
-```env
-DATABASE_URL=postgresql://user:pass@pgbouncer:5432/dbname
-DB_POOL_MAX=20       # tune per instance: (total PgBouncer max_client_conn) / (number of app instances)
-```
-
-PgBouncer runs as a service in Docker Compose:
-
-```yaml
-pgbouncer:
-  image: bitnami/pgbouncer:<pinned-version>
-  environment:
-    POSTGRESQL_HOST: postgres
-    POSTGRESQL_PORT: 5432
-    PGBOUNCER_DATABASE: ${POSTGRES_DB}
-    PGBOUNCER_POOL_MODE: transaction
-    PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
-    PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-25}
-  depends_on:
-    - postgres
-```
-
-All PgBouncer limits are runtime-configurable via `.env`.
-
-### 20.6 Redis query cache
-
-Redis is used as a **read-through cache** for data that is read frequently and written infrequently. This reduces Postgres load at high concurrency.
-
-Caching rules:
-- Cache only data that is safe to serve slightly stale (configurable TTL per resource).
-- Never cache responses that include PII without encrypting the cached value.
-- Use structured cache keys: `<product>:<resource>:<id>` (e.g., `example:product:abc123`).
-- On write/update/delete, **invalidate** the affected cache key immediately — do not rely solely on TTL expiry.
-
-```typescript
-// pattern: cache-aside
-async function getProduct(id: string) {
-  const cached = await redis.get(`example:product:${id}`)
-  if (cached) return JSON.parse(cached)
-  const product = await db.query.products.findFirst({ where: eq(products.id, id) })
-  await redis.setex(`example:product:${id}`, 300, JSON.stringify(product)) // TTL: 5 min
-  return product
+```json
+{
+  "sub": "user_123",
+  "typ": "user",
+  "workspace_id": "ws_123",
+  "roles": ["admin"],
+  "scopes": [],
+  "jti": "token_123",
+  "iss": "https://api.example.com",
+  "aud": "example-api",
+  "iat": 1779400000,
+  "exp": 1779400900
 }
 ```
 
-Cache TTL defaults by resource type:
+Recommended machine token claims:
 
-| Resource type | Default TTL | Rationale |
-|---|---|---|
-| Master data (products, categories) | 5 minutes | Low write frequency |
-| User session metadata | 15 minutes | Balance freshness vs DB load |
-| Aggregated stats / dashboards | 1 minute | Acceptable staleness for analytics |
-| Transactional records | Do not cache | Must always be fresh |
+```json
+{
+  "sub": "client_123",
+  "typ": "machine",
+  "workspace_id": "ws_123",
+  "scopes": ["orders.read", "orders.write"],
+  "jti": "token_456",
+  "iss": "https://api.example.com",
+  "aud": "example-api",
+  "iat": 1779400000,
+  "exp": 1779403600
+}
+```
 
-### 20.7 File storage
+### 20.7 JWK, JWKS, And Key Rotation
 
-| Environment | Storage | Protocol |
-|---|---|---|
-| Local development | **MinIO** (Docker Compose) | S3-compatible API |
-| Staging / Production | **Cloudflare R2** | S3-compatible API, zero egress fees |
-
-Use the AWS SDK (`@aws-sdk/client-s3`) pointed at the appropriate endpoint — same code works for both MinIO and R2.
+All production JWT signing keys use JOSE-compatible JWK material and expose public verification keys through JWKS.
 
 Rules:
-- Never serve files directly from the bucket. Always generate **presigned URLs** with a short expiry (15 minutes for downloads, 5 minutes for uploads).
-- Validate MIME type and file size server-side before accepting uploads. Do not trust the `Content-Type` header alone.
-- Store files outside the web root. The bucket must not be publicly readable.
-- File metadata (original name, size, MIME type, owner) is stored in Postgres; the bucket stores only the binary.
+- Private signing keys are stored in Vault or the approved secrets manager.
+- Public keys are exposed via `/.well-known/jwks.json`.
+- JWT protected headers include `alg`, `kid`, and `typ: "JWT"`.
+- JWKS publishes only public keys.
+- Old public keys remain in JWKS until the maximum token lifetime plus a safety window has elapsed.
+- Emergency key compromise requires disabling the compromised `kid`, revoking affected refresh tokens, and forcing re-auth where needed.
 
-```env
-STORAGE_ENDPOINT=http://localhost:9000     # MinIO locally, R2 endpoint in prod
-STORAGE_BUCKET=minia-uploads
-STORAGE_ACCESS_KEY=...
-STORAGE_SECRET_KEY=...
-STORAGE_PRESIGN_EXPIRY=900                 # seconds (15 min)
+Key rotation flow:
+
+```mermaid
+flowchart TD
+    KeyStore[JWT Key Store / Vault] --> Active[Active Signing Key]
+    KeyStore --> Previous[Previous Verification Keys]
+    Active --> Sign[Sign New JWT with kid]
+    Previous --> Verify[Verify Existing JWTs by kid]
+    Sign --> Token[Issued Token]
+    Token --> Client[Client]
+    Client --> API[API Request]
+    API --> JWKS[Local/Remote JWKS Resolver]
+    JWKS --> Verify
+    Verify --> Accepted{Valid and not expired?}
+    Accepted -- Yes --> Continue[Continue Request]
+    Accepted -- No --> Reject[Reject Token]
 ```
 
-### 20.8 Email: Resend + React Email
+### 20.8 Authorization: RBAC, Scopes, And Tenant Isolation
 
-**Resend** is the mandatory transactional email provider. **React Email** is the template engine.
+RBAC is mandatory for all SaaS backend APIs.
 
-- Define email templates as React components in `src/emails/`.
-- Render to HTML server-side using `@react-email/render` before sending.
-- All sends go through a BullMQ job queue (never block an HTTP response on email delivery).
-- Store a record of every sent email in Postgres (recipient, template name, sent_at, status) for auditability.
+Authorization layers:
 
-```env
-RESEND_API_KEY=...
-EMAIL_FROM=no-reply@minia.id
-EMAIL_ENABLED=true     # set to false in local dev to suppress sends
+| Layer | Purpose |
+|---|---|
+| JWT verification | Proves token authenticity and basic identity |
+| Workspace membership | Proves user/client belongs to the tenant context |
+| RBAC | Authorizes user actions through roles and permissions |
+| Scopes | Authorizes machine and public API access |
+| Resource ownership | Ensures the target resource belongs to the workspace |
+
+Core schema concepts:
+
+```text
+users
+workspaces
+workspace_members
+roles
+permissions
+role_permissions
+member_roles
+api_clients
+api_client_scopes
 ```
 
-### 20.9 Health checks
+Rules:
+- Built-in roles are `owner`, `admin`, `member`, and `viewer`.
+- Schema must support custom roles from day one, even if the first UI exposes only built-in roles.
+- Permission constants use `<resource>.<action>`, for example `users.read`, `users.create`, `billing.manage`.
+- Machine and public API clients use scopes.
+- JWT role and scope claims are optimization hints, not the only authorization source of truth.
+- Final authorization checks happen server-side.
+- Redis may cache resolved permission sets with short TTL and explicit invalidation.
 
-Every backend service exposes two health endpoints — required by Docker and load balancers for readiness and liveness probes.
+Authorization flow:
 
-| Endpoint | Purpose | Response |
-|---|---|---|
-| `GET /health` | **Liveness** — is the process alive? | `200 { "status": "ok" }` always (if the process responds, it's alive) |
-| `GET /ready` | **Readiness** — are dependencies connected? | `200` if Postgres + Redis reachable; `503` if either is down |
+```mermaid
+flowchart TD
+    Req[Incoming Request] --> VerifyJWT[Verify JWT via jose]
+    VerifyJWT --> Valid{Valid signature, iss, aud, exp?}
+    Valid -- No --> Reject401[401 Unauthorized]
+    Valid -- Yes --> Principal[Resolve Principal]
+    Principal --> Tenant[Resolve Workspace / Tenant]
+    Tenant --> Member{Member or API Client belongs to workspace?}
+    Member -- No --> Reject403[403 Forbidden]
+    Member -- Yes --> Kind{Principal Type}
+    Kind -- User --> RBAC[Check RBAC Permission]
+    Kind -- Machine --> Scope[Check API Scope]
+    RBAC --> Resource[Check Resource Ownership]
+    Scope --> Resource
+    Resource --> Allowed{Allowed?}
+    Allowed -- No --> Reject403
+    Allowed -- Yes --> Handler[Run Controller / Service]
+```
 
-The `/ready` endpoint checks actual connectivity (a lightweight `SELECT 1` on Postgres, a `PING` on Redis). It does not check business logic.
+Multi-tenant data access flow:
 
-Both endpoints are excluded from authentication middleware and rate limiting.
+```mermaid
+flowchart TD
+    Handler[Controller Handler] --> AuthCtx[Auth Context]
+    AuthCtx --> Workspace[workspace_id]
+    Handler --> Service[Service Method]
+    Service --> Query[Build DB Query]
+    Workspace --> Query
+    Query --> Filter[WHERE workspace_id = auth.workspace_id]
+    Filter --> DB[(PostgreSQL)]
+    DB --> Result[Return Tenant-Scoped Result]
+```
 
-### 20.10 Graceful shutdown
+### 20.9 Validation
 
-Bun receives `SIGTERM` from Docker on container stop. The backend must handle it cleanly to avoid dropping in-flight requests.
+Elysia's TypeBox-based schema validation handles request and response boundary validation. Zod handles business/domain validation inside services.
+
+Rules:
+- Route boundary schemas are mandatory for body, query, params, and responses.
+- Service-level business validation is mandatory for cross-field rules, state transitions, domain rules, and DB constraint-friendly errors.
+- Frontend validation is UX only; backend validation is authoritative.
+- Validation errors are mapped into the standard error envelope.
+
+### 20.10 Database: PostgreSQL + Drizzle + PgBouncer
+
+PostgreSQL is the mandatory relational database. Drizzle is the mandatory ORM/query builder.
+
+Rules:
+- Use Drizzle schema and migrations.
+- Do not make manual production schema changes outside migrations.
+- Use PgBouncer in transaction mode for staging and production.
+- Application DB URLs point to PgBouncer, not directly to Postgres.
+- Drizzle/Bun SQL pools are bounded per API/worker instance.
+- Raw SQL strings are banned unless using Drizzle's parameterized `sql` helper with a documented reason.
+- Tenant-owned tables include `workspace_id`.
+- Unique constraints include `workspace_id` when uniqueness is tenant-scoped.
+- Add indexes for foreign keys, tenant filters, cursor pagination, lookup columns, and high-traffic filters.
+
+Example DB client:
 
 ```typescript
-// src/index.ts
-const server = app.listen(3000)
+import { SQL } from 'bun'
+import { drizzle } from 'drizzle-orm/bun-sql'
 
-process.on('SIGTERM', async () => {
-  server.stop(true)          // stop accepting new connections; wait for in-flight
-  await db.$client.end()     // close Drizzle / PgBouncer connections
-  await redis.quit()         // close Redis connection
-  await bullQueue.close()    // drain BullMQ queue gracefully
-  process.exit(0)
+const sql = new SQL({
+  url: process.env.DATABASE_URL,
+  max: Number(process.env.DB_POOL_MAX ?? 20),
+  idleTimeout: 30,
+  connectionTimeout: 10
+})
+
+export const db = drizzle(sql)
+```
+
+#### 20.10.1 Migrations, Seeds, And Data Changes
+
+Database changes use Drizzle migrations only.
+
+Migration rules:
+- Every schema change is represented as a committed migration.
+- Do not edit a migration after it has been applied to staging or production.
+- Do not run manual production DDL outside the migration system.
+- Production migrations must be rehearsed in staging with a recent production-shaped dataset when the change is non-trivial.
+- Destructive migrations require a backup, rollback plan, and explicit approval.
+- Long-running migrations must be planned for lock behavior, batch size, and deployment timing.
+
+Expand/contract pattern:
+- Expand: add nullable columns, new tables, new indexes, or backward-compatible structures first.
+- Deploy code that writes both old and new shapes where needed.
+- Backfill data in batches through a controlled job or migration script.
+- Switch reads to the new shape after backfill validation.
+- Contract: remove old columns, indexes, or code paths only after the old version is no longer running.
+
+Index and constraint rules:
+- Add indexes before deploying code paths that depend on them for high-traffic queries.
+- Tenant-scoped uniqueness includes `workspace_id` or the relevant tenant key.
+- Prefer database constraints for invariants that must survive concurrency.
+- Use application validation for user-friendly errors, but never rely on application validation alone for uniqueness or referential integrity.
+
+Seed rules:
+- Local and test seed data must be deterministic.
+- Seed data must not contain real customer PII, production secrets, real API keys, or real webhook secrets.
+- Staging seed data may mimic production scale and shape but must be synthetic or anonymized.
+- Seeds are for setup and test repeatability, not hidden migrations.
+
+### 20.11 Rate Limiting
+
+Redis-backed rate limiting is mandatory.
+
+Rate limiting uses a layered model:
+
+```mermaid
+flowchart LR
+    Client[Client] --> Nginx[Nginx edge limit]
+    Nginx --> API[Elysia API]
+    API --> Redis[(Redis limiter state)]
+    API --> Policy[Rate limit policies]
+    Policy --> Subject[IP / user / workspace / API client / route group]
+```
+
+Layer responsibilities:
+- Nginx owns coarse edge protection against abusive IP bursts before traffic reaches Bun.
+- Elysia owns authoritative product/API limits because it can see authenticated user, workspace, API client, scopes, route group, and request cost.
+- Redis owns distributed limiter state so limits are correct across multiple API containers.
+
+Do not make `elysia-rate-limit` or any third-party plugin the controller-facing abstraction. Products define an internal limiter module, usually `src/lib/rate-limit.ts`, and controllers/macros call that internal API only. The implementation may initially wrap a maintained Redis-backed library, but application code must not depend on that library's API shape.
+
+Recommended internal API:
+
+```typescript
+await rateLimit.check({
+  policy: 'orders.read',
+  subject: {
+    type: 'workspace',
+    id: auth.workspaceId
+  },
+  routeGroup: 'orders',
+  cost: 1
 })
 ```
 
-Docker Compose `stop_grace_period` must be set to at least `30s` to give in-flight requests time to complete before Docker sends `SIGKILL`.
+Limit dimensions:
+- IP address
+- authenticated user
+- workspace
+- API client
+- auth endpoint
+- upload intent endpoint
+- public API route group
+- webhook endpoint where provider retry behavior allows it
 
----
+Redis key shape:
 
-### 20.15 Backend API vs Server Functions
-
-A standalone backend API is necessary when:
-
-- The **mobile app** needs a typed, versioned API endpoint it can call directly
-- A **third-party service** sends webhook callbacks to a fixed endpoint
-- A feature needs to be **independently deployable** and scaled (e.g., a heavy processing service)
-- **Background job workers** need to run in a separate process or container
-- You need **explicit API versioning** (`/api/v1/`, `/api/v2/`) for external consumers
-
-Use **TanStack Start server functions** for:
-
-- Fullstack web product features (the web app is the only consumer)
-- Features that share the same deployment unit as the web app
-- Internal APIs where you control both client and server versions
-
-The rule: **prefer server functions until you have a specific reason not to.** A separate backend API adds versioning overhead, a separate deployment pipeline, and an Eden Treaty client dependency. Only pay that cost when the use case demands it.
-
----
-
-### 20.16 Webhook Endpoints
-
-Webhook endpoints receive inbound calls from external services — payment providers, logistics partners, notification platforms. These providers have strict timeout windows (typically 3–10 seconds) and aggressive retry strategies (up to 25 retries over 72 hours for some providers). Any processing that exceeds the timeout causes the provider to mark the delivery as failed and retry, leading to duplicate events.
-
-This section defines two things: the **async processing pattern** (how to handle webhooks without timing out) and the **security model** (how to authenticate and validate every inbound webhook). Both are mandatory and uniform across all third-party integrations.
-
----
-
-#### 20.16.1 Async Processing Pattern — Mermaid Diagram
-
-```mermaid
-flowchart TD
-    P[External Provider] -->|POST webhook| WH[Webhook Handler]
-    
-    WH --> L1{Layer 1<br/>IP Whitelist?}
-    L1 -- Fail --> R1[Reject 403]
-    L1 -- Pass --> L2{Layer 2<br/>API Key?}
-    
-    L2 -- Fail --> R2[Reject 403]
-    L2 -- Pass --> L3{Layer 3<br/>HMAC Signature?}
-    
-    L3 -- Fail --> R3[Reject 400]
-    L3 -- Pass --> L4{Replay<br/>Check?}
-    
-    L4 -- Fail --> R4[Reject 400]
-    L4 -- Pass --> IC{Idempotency<br/>Check}
-    
-    IC -- Duplicate --> R5[Return 200<br/>Skip Queue]
-    IC -- New --> PERSIST[Persist Raw Event<br/>webhook_events table]
-    
-    PERSIST --> ENQUEUE[Enqueue BullMQ Job]
-    ENQUEUE --> RESPOND[Return 200]
-    
-    RESPOND --> WK[BullMQ Worker]
-    WK --> BL[Business Logic]
-    WK --> UPDATE[Update Status<br/>processed / failed]
-    
-    style R1 fill:#e74c3c,color:#fff
-    style R2 fill:#e74c3c,color:#fff
-    style R3 fill:#e74c3c,color:#fff
-    style R4 fill:#e74c3c,color:#fff
-    style R5 fill:#f39c12,color:#fff
-    style RESPOND fill:#27ae60,color:#fff
+```text
+rl:{env}:{profile}:ip:{ip}:{routeGroup}
+rl:{env}:{profile}:user:{userId}:{routeGroup}
+rl:{env}:{profile}:workspace:{workspaceId}:{routeGroup}
+rl:{env}:{profile}:client:{clientId}:{scopeOrRouteGroup}
 ```
 
----
+Key rules:
+- Use route groups such as `orders.read`, `auth.login`, `media.intent`, or `webhooks.inbound`, not raw URLs.
+- Never include bearer tokens, API keys, emails, request bodies, or PII in Redis keys.
+- Do not use resource IDs in route-group names unless the endpoint has a documented per-resource abuse case.
+- Include environment and API profile so staging, production, internal API, and public API counters cannot collide.
 
-#### 20.16.2 Async Processing Pattern — Text
+Algorithm defaults:
 
-**The rule: receive immediately, process asynchronously.** The HTTP handler does only four things synchronously — verify, check, persist, enqueue — then returns `200`. All business logic runs in a BullMQ worker.
+| Use case | Default algorithm | Reason |
+|---|---|---|
+| General internal API | Sliding window counter | Smooths fixed-window boundary bursts with low Redis memory use |
+| Public API client limits | Sliding window counter or token bucket | Stable quota semantics; token bucket allows controlled bursts |
+| Auth login/password/API key creation | Strict sliding window or fixed window plus block duration | Prefer predictable lockout behavior over burst tolerance |
+| Upload intent endpoints | Sliding window counter | Prevents storage abuse before object upload starts |
+| Expensive export/import/search endpoints | Weighted sliding window counter | One expensive request can consume multiple points |
+| Outbound provider calls from workers | Token bucket or leaky bucket | Protects downstream providers and smooths retries |
 
-```
-[External Provider] → POST /api/v1/webhooks/:provider
-                           │
-                    ┌──────▼────────────────────────────┐
-                    │  SYNCHRONOUS — must complete       │
-                    │  within provider timeout (~500ms)  │
-                    │                                    │
-                    │  1. IP whitelist check             │
-                    │  2. API Key check (if supported)   │
-                    │  3. HMAC signature verification    │
-                    │  4. Timestamp replay check         │
-                    │  5. Idempotency check              │
-                    │  6. Persist raw event (pending)    │
-                    │  7. Enqueue BullMQ job             │
-                    │  8. Return HTTP 200                │
-                    └──────┬────────────────────────────┘
-                           │
-                    ┌──────▼────────────────────────────┐
-                    │  ASYNCHRONOUS — BullMQ worker      │
-                    │                                    │
-                    │  Parse + validate payload          │
-                    │  Execute business logic            │
-                    │  Update event status               │
-                    │  Retry on failure (exp. backoff)   │
-                    └───────────────────────────────────┘
-```
+Policy matrix:
 
-**Idempotency.** Store the provider's event ID in Postgres before queueing. If the same event ID arrives again (provider retry), return `200` immediately without re-queueing. This is the primary guard against duplicate processing.
+| Policy | Subject | Example default | Notes |
+|---|---|---|---|
+| Edge IP burst | IP | `20r/s` at Nginx with burst | Coarse abuse shield only |
+| API IP fallback | IP + route group | `300/min/ip` | Applies before auth or when auth is absent |
+| Login | IP + normalized identifier | `5/min`, block `15min` | Do not reveal whether the identifier exists |
+| Token refresh | user or client | `30/min` | Fail closed if limiter is unavailable |
+| API key creation | user + workspace | `5/hour` | Prevents key churn and brute-force naming flows |
+| Workspace API | workspace + route group | product-specific | Protects shared tenant resources |
+| Public API client | API client + scope/route group | plan-specific | Must be documented in public API docs |
+| Upload intent | user + workspace | `10/min/user`, `100/hour/workspace` | Actual blob transfer still goes to object storage |
+| Webhook inbound | provider + endpoint | provider-specific | Avoid breaking legitimate provider retries |
+| Export/import | user + workspace + route group | weighted points | Long-running work must also be queued |
 
-**BullMQ retry strategy for webhook workers:**
-- 5 attempts with exponential backoff: 2s → 4s → 8s → 16s → 32s.
-- After all retries exhausted, move to the dead-letter queue — never discard silently.
-- Update `webhookEvents.status`: `pending` → `processed` on success, `failed` after terminal failure.
-- Failed events surface in Bull Board (§13) and trigger a Sentry alert.
+Elysia integration:
 
----
+```text
+onRequest
+  -> derive request id and client IP
+  -> apply coarse Redis-backed IP/route-group limit when useful
+  -> reject early with 429 if exceeded
 
-#### 20.16.3 Webhook Security Model — Mermaid Diagram
+auth resolve / guard
+  -> verify JWT, API key, or webhook signature
+  -> derive user, workspace, API client, scopes, and route group
 
-```mermaid
-flowchart TD
-    IN[Inbound Request] --> IPW{IP Whitelist<br/>Layer 1}
-    
-    IPW -->|Not in CIDR| R1[403<br/>Reject]
-    IPW -->|In CIDR| AK{API Key<br/>Layer 2}
-    
-    AK -->|Missing/Invalid| R2[403<br/>Reject]
-    AK -->|Valid| HMAC{HMAC-SHA256<br/>Layer 3}
-    
-    HMAC -->|Invalid| R3[400<br/>Reject]
-    HMAC -->|Valid| TS{Timestamp<br/>Replay Check}
-    
-    TS -->|Older than 5min| R4[400<br/>Reject]
-    TS -->|Valid| PASS[Pass → Idempotency → Queue]
-    
-    style R1 fill:#e74c3c,color:#fff
-    style R2 fill:#e74c3c,color:#fff
-    style R3 fill:#e74c3c,color:#fff
-    style R4 fill:#e74c3c,color:#fff
-    style PASS fill:#27ae60,color:#fff
+macro / beforeHandle
+  -> apply policy-specific user/workspace/client limiter
+  -> attach rate limit headers
+  -> continue to handler only if allowed
 ```
 
----
-
-#### 20.16.4 Webhook Security Model — Text
-
-Every webhook endpoint in every product adopting this standard must implement the same **three-layer security model**, applied in order from cheapest to most expensive. A request is rejected at the first layer it fails — later layers are not evaluated.
-
-```
-Inbound request
-      │
-      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 1 — IP Whitelist                                     │
-│  Cheapest. Nginx-level or application-level check.          │
-│  Reject with 403 if source IP is not in provider's range.   │
-└─────────────────┬───────────────────────────────────────────┘
-                  │ pass
-                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 2 — API Key Header                                   │
-│  Mid-cost. Header present + value matches shared secret.    │
-│  Reject with 403 if missing or incorrect.                   │
-│  Apply only when the provider supports it.                  │
-└─────────────────┬───────────────────────────────────────────┘
-                  │ pass
-                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 3 — HMAC-SHA256 Signature                            │
-│  Most expensive. Cryptographic proof the body is authentic. │
-│  Reject with 400 if signature does not match.               │
-│  Always present — this is the definitive verification.      │
-└─────────────────┬───────────────────────────────────────────┘
-                  │ pass
-                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Bonus — Timestamp / Replay Protection                      │
-│  Reject with 400 if event timestamp is older than 5 min.    │
-│  Prevents captured-and-replayed valid requests.             │
-└─────────────────┬───────────────────────────────────────────┘
-                  │ pass → proceed to idempotency check + queue
-```
-
----
-
-**Layer 1 — IP Whitelist**
-
-Every major provider publishes its webhook sender IP ranges. Check the inbound IP against these ranges before doing anything else. This eliminates random internet traffic at zero cryptographic cost.
-
-- IP is read from the `X-Forwarded-For` header set by Nginx (trust only Nginx's header, not the raw socket IP — the app container is behind the proxy).
-- IP ranges are stored in `.env` as comma-separated CIDR blocks per provider.
-- If a provider does not publish IP ranges, skip this layer — do not fabricate a fake whitelist.
-- IP ranges change occasionally. Monitor provider release notes and update `.env` accordingly. This layer is defense-in-depth, not the primary control.
-
-```env
-WEBHOOK_IP_WHITELIST_PAYMENT=103.4.55.0/24,103.4.56.0/24   # provider's published ranges
-WEBHOOK_IP_WHITELIST_LOGISTICS=202.80.0.0/20
-```
-
----
-
-**Layer 2 — API Key Header**
-
-A shared static secret sent in a custom request header. Some providers call it `X-Api-Key`, others `X-Webhook-Token` — use whatever the provider specifies. This is a pre-filter before the more expensive HMAC computation.
-
-- Apply only when the provider explicitly supports sending a static API key header.
-- Use a randomly generated secret (minimum 32 bytes, hex or base64), not a human-memorable password.
-- Compare using timing-safe equality (`crypto.timingSafeEqual`) — never `===`.
-
-```env
-WEBHOOK_API_KEY_PAYMENT=<random-32-byte-hex>    # set in Vault for staging/prod
-WEBHOOK_API_KEY_HEADER_PAYMENT=X-Payment-Token  # the header name the provider sends
-```
-
----
-
-**Layer 3 — HMAC-SHA256 Signature (mandatory)**
-
-The provider signs the raw request body with a shared secret using HMAC-SHA256 and sends the result in a signature header. The application recomputes the HMAC independently and compares the two values.
-
-Critical implementation rules:
-- **Use the raw request body** (bytes before JSON parsing). Some providers compute the HMAC over the raw body including whitespace. Parse JSON only after the signature check passes.
-- **Use `crypto.timingSafeEqual`** for comparison — a standard string `===` check leaks timing information that can be used to forge signatures.
-- The signature format varies by provider (`sha256=<hex>`, `v1=<hex>`, etc.). Strip the prefix before comparing.
+Minimal Elysia shape:
 
 ```typescript
-// src/lib/webhook-verify.ts
+import { Elysia } from 'elysia'
+import { rateLimit } from './lib/rate-limit'
+import { rateLimited } from './lib/response'
 
-import { createHmac, timingSafeEqual } from 'crypto'
+export const rateLimitPlugin = new Elysia({ name: 'rate-limit' })
+  .onRequest(async ({ request, set }) => {
+    const result = await rateLimit.checkIp({
+      ip: request.headers.get('x-real-ip') ?? 'unknown',
+      routeGroup: 'global'
+    })
 
-export function verifyHmac(
-  rawBody: string,
-  receivedSig: string,     // the full header value, e.g. "sha256=abc123"
-  secret: string,
-  prefix = 'sha256='       // provider-specific prefix to strip
-): boolean {
-  const clean = receivedSig.startsWith(prefix)
-    ? receivedSig.slice(prefix.length)
-    : receivedSig
+    if (!result.allowed) {
+      set.status = 429
+      set.headers['Retry-After'] = String(result.retryAfterSeconds)
+      set.headers['RateLimit-Limit'] = String(result.limit)
+      set.headers['RateLimit-Remaining'] = '0'
+      set.headers['RateLimit-Reset'] = String(result.resetAtUnix)
+      return rateLimited(result.retryAfterSeconds)
+    }
+  })
+  .macro(({ onBeforeHandle }) => ({
+    rateLimit(policy: string) {
+      onBeforeHandle(async ({ auth, set }) => {
+        const result = await rateLimit.check({
+          policy,
+          subject: auth.apiClientId
+            ? { type: 'client', id: auth.apiClientId }
+            : { type: 'workspace', id: auth.workspaceId },
+          routeGroup: policy,
+          cost: 1
+        })
 
-  const expected = createHmac('sha256', secret)
-    .update(rawBody, 'utf8')
-    .digest('hex')
+        set.headers['RateLimit-Limit'] = String(result.limit)
+        set.headers['RateLimit-Remaining'] = String(result.remaining)
+        set.headers['RateLimit-Reset'] = String(result.resetAtUnix)
 
-  // timing-safe comparison — never use ===
-  try {
-    return timingSafeEqual(Buffer.from(clean), Buffer.from(expected))
-  } catch {
-    return false  // buffers of different length — definite mismatch
+        if (!result.allowed) {
+          set.status = 429
+          set.headers['Retry-After'] = String(result.retryAfterSeconds)
+          return rateLimited(result.retryAfterSeconds)
+        }
+      })
+    }
+  }))
+```
+
+Rules:
+- Return HTTP `429 Too Many Requests` with `Retry-After`.
+- Return `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` on limited route groups when feasible.
+- Map limiter denials into the standard error envelope with error code `RATE_LIMITED`.
+- Public API rate limits are stricter and must be documented.
+- Login, token refresh, password reset, API key creation, and upload intent endpoints get stricter limits than ordinary reads.
+- Rate limit counters must not use high-cardinality labels in telemetry.
+- Limiter code must use low-latency Redis operations and short timeouts. Do not let Redis limiter calls hang request handling.
+- Redis clients used by the limiter must not queue unbounded work during outages.
+- Auth, token refresh, API key creation, unsafe writes, upload intent, and public API limits fail closed when Redis is unavailable.
+- Low-risk authenticated reads may fail open only when explicitly documented in the project ADR.
+- Workers use separate outbound limiter policies for external providers; do not reuse inbound HTTP policies for outbound provider traffic.
+
+Standard rate limit error:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many requests. Please retry later.",
+    "details": [
+      { "field": "retryAfterSeconds", "message": "60" }
+    ]
   }
 }
 ```
 
-```env
-WEBHOOK_SECRET_PAYMENT=<random-32-byte-hex>        # HMAC signing secret
-WEBHOOK_SIG_HEADER_PAYMENT=X-Payment-Signature     # header name carrying the signature
-WEBHOOK_SIG_PREFIX_PAYMENT=sha256=                 # prefix to strip before comparing
+Telemetry:
+- `rate_limit_checks_total`
+- `rate_limit_allowed_total`
+- `rate_limit_denied_total`
+- `rate_limit_redis_errors_total`
+- `rate_limit_latency_ms`
+
+Allowed labels:
+- `policy`
+- `subject_type`
+- `route_group`
+- `api_profile`
+- `result`
+
+Forbidden labels:
+- raw IP address
+- user ID
+- workspace ID
+- API key or client secret
+- raw URL path
+- email or phone number
+
+### 20.12 Idempotency
+
+Idempotency is mandatory for unsafe writes and external/public API side effects.
+
+Rules:
+- Use `Idempotency-Key` for side-effecting public API `POST` requests.
+- Store request hash, actor, route, status, and response summary in PostgreSQL or Redis with durable fallback where needed.
+- Same key plus same payload returns the original result.
+- Same key plus different payload returns a conflict.
+- Required for payments, orders, imports, media completion, external writes, webhook processing, and irreversible actions.
+
+### 20.13 Pagination, Filtering, And Sorting
+
+Rules:
+- All list endpoints are paginated.
+- Use offset pagination for bounded master data.
+- Use cursor pagination for fast-growing transactional data.
+- Enforce server-side maximum page size.
+- Sorting must be stable and deterministic.
+- Filters, search, sort, page, and page size must be represented in OpenAPI.
+- Response `meta` uses consistent names so dashboard TanStack Query/Table integrations remain predictable.
+
+### 20.14 Redis And BullMQ
+
+Redis and BullMQ are mandatory from day one.
+
+Use BullMQ for:
+- email sending
+- webhook processing
+- push notification fanout
+- media processing
+- imports/exports
+- retries against external providers
+- scheduled background work
+
+Rules:
+- Queue names and job names are constants.
+- Job payloads are schema-validated.
+- Workers call the same `services/` layer as HTTP controllers.
+- Do not duplicate business logic inside workers.
+- Jobs are idempotent.
+- Default retries use exponential backoff.
+- Failed terminal jobs move to a dead-letter or failed state and trigger alerts.
+- Trace context is propagated from HTTP request to BullMQ job payload or metadata.
+- Bull Board or any queue UI must be auth-gated and hidden from public OpenAPI.
+
+Job flow:
+
+```mermaid
+flowchart TD
+    Req[HTTP Request / Webhook / Scheduler] --> Validate[Validate Input]
+    Validate --> Persist[Persist State / Idempotency Record]
+    Persist --> Enqueue[Enqueue BullMQ Job with trace context]
+    Enqueue --> Respond[Return API Response]
+    Enqueue --> Worker[Worker Processes Job]
+    Worker --> Service[Call Service Layer]
+    Service --> Success{Success?}
+    Success -- Yes --> Complete[Mark Job Complete]
+    Success -- No --> Retry{Attempts Left?}
+    Retry -- Yes --> Backoff[Exponential Backoff Retry]
+    Backoff --> Worker
+    Retry -- No --> DLQ[Dead Letter / Failed State]
+    DLQ --> Alert[Alert + Operational Review]
 ```
 
----
+#### 20.14.1 Caching Strategy
 
-**Replay protection**
+Redis caching is an optimization layer. PostgreSQL remains the source of truth for durable business data.
 
-Many providers embed a timestamp in the payload or signature header. Reject any event with a timestamp older than 5 minutes. This prevents a valid captured request from being replayed hours or days later.
+Cacheable data:
+- permission resolution results with short TTL and explicit invalidation
+- workspace membership lookups
+- master/reference data that changes infrequently
+- expensive read models that are safe to serve slightly stale
+- idempotency in-progress guards where Redis durability is acceptable for the specific flow
+- short-lived provider metadata that can be safely refetched
+
+Do not cache by default:
+- raw access tokens, refresh tokens, API keys, or client secrets
+- unredacted PII
+- payment card data or regulated secrets
+- authorization decisions without tenant scope and invalidation
+- mutable business records where stale reads can cause wrong side effects
+
+Key rules:
+- Prefix cache keys with environment, product/profile, tenant/workspace where relevant, and purpose.
+- Do not use raw URLs as cache keys for authenticated endpoints.
+- Do not include bearer tokens, cookies, emails, phone numbers, request bodies, or PII in cache keys.
+- Use route groups and stable identifiers instead of unbounded high-cardinality text.
+
+TTL defaults:
+
+| Cache type | Default TTL |
+|---|---:|
+| Permission and membership cache | `30s` to `5m` |
+| Master/reference data | `5m` to `1h` |
+| Expensive read model | `30s` to `10m` |
+| External provider metadata | provider-specific, usually `5m` to `1h` |
+| Idempotency in-progress guard | aligned with request timeout plus retry window |
+
+Invalidation rules:
+- Permission and membership changes must invalidate affected permission cache keys.
+- Role changes invalidate user, workspace, and API-client permission caches as applicable.
+- Writes that change cached read models must either invalidate keys or publish a cache-busting event.
+- If invalidation cannot be made reliable, use a shorter TTL and document the acceptable staleness.
+
+Stampede protection:
+- Use single-flight locking or short Redis locks for high-cost cache fills.
+- Add TTL jitter to frequently accessed keys.
+- Serve stale data only for read-only responses where the product accepts staleness.
+- Never hold a Redis lock across network calls unless the timeout is strict and documented.
+
+#### 20.14.2 Queue Handling, Retries, And Backoff
+
+Queues are product infrastructure, not a dumping ground for arbitrary async code. Every queue and job type must have explicit ownership, retry behavior, timeout behavior, and failure handling.
+
+Queue taxonomy:
+
+| Queue class | Use for | Default posture |
+|---|---|---|
+| `critical` | audit-sensitive internal work, billing finalization, security notifications | low concurrency, immediate alert on failure |
+| `default` | normal async product work | balanced concurrency and retries |
+| `bulk` | imports, exports, media processing, large fanout | lower priority, longer timeout, checkpointed progress |
+| `outbound` | email, push, customer webhooks, third-party provider calls | provider-specific rate limits and retry classification |
+
+Job naming and payload rules:
+- Job names use `domain.action.v1`, for example `media.process.v1`, `webhook.deliver.v1`, or `email.send.v1`.
+- Version job names or payload schemas when changing shape in a way old workers cannot process.
+- Job payloads include `schema_version`, `workspace_id` where applicable, actor context, idempotency key where applicable, and trace context.
+- Job payloads must be schema-validated before enqueue and before execution.
+- Job payloads must not include bearer tokens, API keys, refresh tokens, raw cookies, or unredacted PII unless an ADR approves the exception.
+- Store sensitive small records in PostgreSQL; store large or binary data in object storage; pass only IDs or object keys in the job payload.
+
+Enqueue rules:
+- Persist business state before enqueueing a job.
+- For critical side effects, use an outbox table or equivalent transactional enqueue pattern so DB commit and job dispatch cannot diverge silently.
+- Do not enqueue jobs from inside an uncommitted transaction unless the enqueue operation is part of a documented outbox pattern.
+- Use deterministic job IDs for naturally idempotent work, such as `media:{mediaId}:process:v1`.
+- Return from HTTP after enqueueing only when the durable state required to recover the job exists.
+
+Retry defaults:
+
+| Setting | Default |
+|---|---:|
+| Attempts | `5` |
+| Backoff | exponential |
+| Initial delay | `1s` |
+| Maximum delay | `5m` |
+| Jitter | required |
+| Remove completed jobs | after count/age retention policy |
+| Retain failed jobs | yes, until operational retention expires |
+
+Retry classification:
+- Retry transient infrastructure errors: network timeouts, provider `408`, provider `429`, provider `5xx`, temporary DNS failure, object storage timeout, and database serialization conflicts when safe.
+- Do not retry permanent validation errors, missing required records, forbidden provider responses, invalid recipient addresses, unsupported media types, or schema-version mismatches.
+- Payment and billing jobs require application idempotency and provider idempotency keys where the provider supports them.
+- Media/import jobs must checkpoint progress and retry the failed chunk or step, not blindly restart multi-hour work.
+- Outbound webhooks retry `408`, `429`, and `5xx`; most `4xx` responses are terminal unless the provider/customer contract says otherwise.
+
+Dead-letter and poison job rules:
+- Jobs that exhaust retries move to a failed or dead-letter state with enough metadata for diagnosis.
+- Critical queue terminal failures alert immediately.
+- Default/bulk queue alerts trigger on repeated failures, queue lag, DLQ growth, or failure-rate thresholds.
+- A job that repeatedly fails with the same deterministic validation/domain error is a poison job and must be marked terminal, not retried indefinitely.
+- Manual replay requires admin RBAC, an audit log entry, and a safe replay path that preserves idempotency.
+
+Concurrency and priority rules:
+- Configure concurrency per queue and per worker type, not as one global number.
+- Bulk queues must not starve critical or default queues.
+- Outbound queues must respect provider-specific rate limits and provider terms.
+- Worker concurrency must be sized against database pool limits, Redis capacity, object storage limits, and provider limits.
+- Increasing concurrency is a capacity change and should be paired with dashboard/alert review.
+
+Observability:
+- Track queue depth, queue lag, active jobs, completed jobs, failed jobs, retry count, DLQ count, and worker runtime duration.
+- Logs include `job_id`, `job_name`, `attempt`, `trace_id`, `queue_name`, and safe error code.
+- Avoid high-cardinality metric labels such as raw resource IDs, user IDs, emails, object keys, or raw provider response bodies.
+
+Reference BullMQ defaults:
 
 ```typescript
-const eventTimestamp = body.created_at  // provider-specific field name
-const ageMs = Date.now() - new Date(eventTimestamp).getTime()
-if (ageMs > 5 * 60 * 1000) {
-  return error(400, 'Webhook event too old — possible replay attack')
+import { Queue, Worker } from 'bullmq'
+import { redisConnection } from './lib/redis'
+
+export const mediaQueue = new Queue('bulk.media', {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: {
+      type: 'exponential',
+      delay: 1_000
+    },
+    removeOnComplete: {
+      age: 60 * 60,
+      count: 1_000
+    },
+    removeOnFail: false
+  }
+})
+
+export const mediaWorker = new Worker(
+  'bulk.media',
+  async (job) => {
+    return processMediaJob(job.data)
+  },
+  {
+    connection: redisConnection,
+    concurrency: Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 5),
+    limiter: {
+      max: Number(process.env.MEDIA_WORKER_RATE_MAX ?? 100),
+      duration: Number(process.env.MEDIA_WORKER_RATE_DURATION_MS ?? 60_000)
+    }
+  }
+)
+```
+
+### 20.15 Realtime And Push Notifications
+
+Separate in-app realtime from push notifications.
+
+| Need | Standard |
+|---|---|
+| In-app server-to-client updates | SSE by default |
+| Bidirectional realtime interactions | WebSocket by exception |
+| Mobile push when app is closed | FCM/APNs through worker |
+| Browser push when page is closed | Web Push API + VAPID through worker |
+| Notification persistence | PostgreSQL notification table |
+
+Rules:
+- Use SSE for notifications, job progress, and dashboard live updates unless bidirectional behavior is required.
+- Use WebSocket only for chat, collaboration, presence, live device/session control, or high-frequency bidirectional interaction.
+- Push notification delivery runs through BullMQ workers.
+- Store notification records and delivery attempts in PostgreSQL.
+- Delivery failures emit telemetry and alerts.
+
+### 20.16 Media Uploads And Object Storage
+
+Never store blob/file bytes in PostgreSQL.
+
+Rules:
+- Store binary files in S3-compatible object storage.
+- PostgreSQL stores only metadata, bucket, object key/path, status, checksum, and ownership.
+- Store `object_key`, not a permanent public URL, as the source of truth.
+- Buckets are private by default.
+- Use presigned uploads by default.
+- Use short-lived presigned downloads by default.
+- Client must never choose arbitrary object paths.
+- Object keys are generated server-side and include tenant/workspace-safe prefixes.
+- Validate MIME type, max size, file purpose, quota, and permission before issuing upload URLs.
+- Validate object existence before marking an upload complete.
+- File processing, scanning, thumbnailing, OCR, imports, and transcodes run in BullMQ workers.
+
+Storage environments:
+
+| Environment | Storage |
+|---|---|
+| Local development | MinIO |
+| Staging | MinIO or managed S3-compatible storage |
+| Production | Cloudflare R2, AWS S3, managed S3-compatible storage, or approved self-hosted MinIO with backups |
+
+Recommended media metadata fields:
+
+```text
+id
+workspace_id
+owner_id
+bucket
+object_key
+original_filename
+mime_type
+size_bytes
+checksum_sha256
+visibility
+status: pending | uploaded | failed | deleted
+purpose
+created_at
+uploaded_at
+deleted_at
+```
+
+Upload flow:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Elysia API
+    participant DB as PostgreSQL
+    participant S3 as S3-Compatible Storage
+    participant Queue as BullMQ
+
+    Client->>API: Request upload intent
+    API->>API: Check JWT + RBAC/scope + quota
+    API->>API: Validate MIME, size, purpose
+    API->>DB: Create media record(status=pending, object_key)
+    API->>S3: Generate presigned PUT URL
+    API-->>Client: Return upload URL + media_id
+    Client->>S3: Upload file directly
+    Client->>API: Complete upload(media_id)
+    API->>S3: HEAD object / verify metadata
+    API->>DB: Mark media uploaded
+    API->>Queue: Enqueue processing job if needed
+    API-->>Client: Return media metadata
+```
+
+Download flow:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Elysia API
+    participant DB as PostgreSQL
+    participant S3 as S3-Compatible Storage
+
+    Client->>API: Request media download URL
+    API->>API: Verify JWT + RBAC/scope
+    API->>DB: Load media metadata + workspace ownership
+    API->>S3: Generate short-lived presigned GET URL
+    API-->>Client: Return temporary download URL
+    Client->>S3: Download file directly
+```
+
+### 20.17 Webhooks
+
+Inbound provider webhooks follow a receive-fast, process-async pattern.
+
+Rules:
+- Read raw body before JSON parsing.
+- Verify HMAC signatures over raw bytes when the provider supports signatures.
+- Use timing-safe comparison for signatures and API keys.
+- Apply IP allowlists only when the provider publishes stable ranges.
+- Apply timestamp replay protection when the provider supplies a trusted timestamp.
+- Store provider event IDs for idempotency.
+- Persist raw event metadata, enqueue BullMQ job, and return quickly.
+- Hide inbound webhook routes from consumer OpenAPI specs.
+
+Inbound webhook flow:
+
+```mermaid
+flowchart TD
+    Provider[External Provider] --> Webhook[Webhook Endpoint]
+    Webhook --> Raw[Read Raw Body]
+    Raw --> IP{IP Allowlist Supported?}
+    IP -- Fail --> Reject403[403]
+    IP -- Pass/Skipped --> ApiKey{API Key Supported?}
+    ApiKey -- Fail --> Reject403
+    ApiKey -- Pass/Skipped --> HMAC[Verify HMAC Signature]
+    HMAC --> HMACOk{Valid?}
+    HMACOk -- No --> Reject400[400]
+    HMACOk -- Yes --> Replay{Timestamp Fresh?}
+    Replay -- No --> Reject400
+    Replay -- Yes --> Idem{Event Already Seen?}
+    Idem -- Yes --> Return200[Return 200]
+    Idem -- No --> Store[Persist Raw Event]
+    Store --> Queue[Enqueue Processing Job]
+    Queue --> Return200
+```
+
+Public API projects that emit customer webhooks must also implement outbound webhook delivery.
+
+Outbound webhook rules:
+- Maintain an event catalog.
+- Customers register endpoints and event subscriptions.
+- Sign every payload with a per-endpoint secret.
+- Store delivery attempts and responses.
+- Retry with exponential backoff.
+- Dead-letter terminal failures.
+- Provide a replay mechanism.
+
+Outbound webhook flow:
+
+```mermaid
+flowchart TD
+    Event[Domain Event] --> Match[Find Webhook Subscriptions]
+    Match --> Enqueue[Enqueue Delivery Jobs]
+    Enqueue --> Worker[Webhook Delivery Worker]
+    Worker --> Sign[Sign Payload with Customer Secret]
+    Sign --> Send[POST to Customer Endpoint]
+    Send --> Result{2xx?}
+    Result -- Yes --> Delivered[Mark Delivered]
+    Result -- No --> Retry{Attempts Left?}
+    Retry -- Yes --> Backoff[Retry with Backoff]
+    Backoff --> Worker
+    Retry -- No --> Failed[Mark Failed + DLQ]
+    Failed --> Replay[Allow Manual Replay]
+```
+
+### 20.18 Telemetry And Observability
+
+OpenTelemetry is mandatory for API and worker processes.
+
+Telemetry layers:
+
+| Layer | Standard | Purpose |
+|---|---|---|
+| Logs | Pino JSON | Operational debugging and searchable request/job logs |
+| Traces | OpenTelemetry | Request, job, DB, Redis, storage, and provider timing |
+| Metrics | OpenTelemetry/Prometheus | Health, throughput, latency, failures, queue depth |
+| Audit logs | PostgreSQL | Security and business accountability |
+
+Rules:
+- Start telemetry before route and worker registration.
+- Flush telemetry on graceful shutdown.
+- Propagate trace context into BullMQ jobs.
+- Include `trace_id`, `span_id`, and `request_id` in logs.
+- Do not record PII, tokens, secrets, full request bodies, or high-cardinality IDs in spans or metric labels.
+- Health endpoints should be excluded from noisy traces where practical.
+
+Telemetry flow:
+
+```mermaid
+flowchart LR
+    API[Elysia API] --> Logs[Pino JSON Logs]
+    Worker[Workers] --> Logs
+    API --> Traces[OpenTelemetry Traces]
+    Worker --> Traces
+    API --> Metrics[OpenTelemetry Metrics]
+    Worker --> Metrics
+
+    Logs --> Collector[OTel Collector / Log Pipeline]
+    Traces --> Collector
+    Metrics --> Collector
+
+    Collector --> Loki[Loki Logs]
+    Collector --> Tempo[Tempo Traces]
+    Collector --> Prometheus[Prometheus Metrics]
+    Loki --> Grafana[Grafana]
+    Tempo --> Grafana
+    Prometheus --> Grafana
+```
+
+Required metrics include:
+- `http_requests_total`
+- `http_request_duration_seconds`
+- `http_errors_total`
+- `auth_failures_total`
+- `rbac_denials_total`
+- `rate_limit_denials_total`
+- `db_query_duration_seconds`
+- `redis_command_duration_seconds`
+- `bullmq_jobs_enqueued_total`
+- `bullmq_jobs_completed_total`
+- `bullmq_jobs_failed_total`
+- `webhook_events_failed_total`
+- `media_upload_completed_total`
+- `push_notifications_failed_total`
+
+Allowed metric labels:
+- `service`
+- `env`
+- `route`
+- `method`
+- `status_code`
+- `job_name`
+- `provider`
+- `error_code`
+- `api_profile`
+
+Banned metric labels:
+- `user_id`
+- `email`
+- `phone`
+- `workspace_id`
+- `request_id`
+- `resource_id`
+- raw path values containing IDs
+
+### 20.19 Logging: Pino
+
+Pino is the mandatory logger.
+
+Rules:
+- Production logs are structured JSON.
+- Local development may use pretty logs.
+- Never log PII, bearer tokens, refresh tokens, API keys, cookies, card data, or raw request bodies by default.
+- Redact `Authorization`, `Cookie`, `Set-Cookie`, API key headers, and provider secrets.
+- Every request log includes `request_id`, `trace_id`, `method`, `route`, `status`, and `duration_ms`.
+- Worker logs include `job_id`, `job_name`, `attempt`, `trace_id`, and safe error codes.
+
+### 20.20 Audit Log
+
+Audit logs are mandatory and live in PostgreSQL. They are product/security records, not disposable telemetry.
+
+Recommended fields:
+
+```text
+id
+workspace_id
+actor_type: user | machine | system
+actor_id
+action
+resource_type
+resource_id
+result: allowed | denied | success | failure
+ip
+user_agent
+request_id
+metadata
+created_at
+```
+
+Mandatory audit events:
+- login/logout/session refresh
+- token refresh failure and suspicious auth events
+- RBAC role or permission changes
+- member invites, removals, and role changes
+- API client/key creation, rotation, and revocation
+- media upload intent, upload completion, download URL issuance, and deletion
+- destructive actions
+- billing/payment-sensitive actions
+- public API auth failures and rate limit denials
+
+### 20.21 Health, Readiness, Metrics, And Admin Endpoints
+
+Every backend exposes:
+
+| Endpoint | Purpose | Auth |
+|---|---|---|
+| `GET /health` | Liveness, process responds | Public to Nginx/load balancer |
+| `GET /ready` | Dependency readiness | Internal/Nginx/load balancer |
+| `GET /metrics` | Prometheus scrape if used | Internal only |
+| `GET /docs` | Scalar docs | Dev/staging or auth-gated |
+| `GET /.well-known/jwks.json` | Public JWT verification keys | Public |
+
+Rules:
+- `/health` must not check dependencies.
+- `/ready` checks PostgreSQL, Redis, and any mandatory storage dependency.
+- Health/readiness responses must not expose secrets, internal hostnames, image tags, dependency credentials, or detailed config.
+- `/ready` returns 503 during graceful shutdown.
+
+#### 20.21.1 Timeouts, Body Limits, And Abort Handling
+
+Every backend API must define explicit limits. Unbounded parsing, unbounded provider calls, and unbounded database waits are banned.
+
+Baseline limits:
+
+| Limit | Default |
+|---|---:|
+| JSON body size | `1mb` unless endpoint requires more |
+| Form body size | `1mb` unless endpoint requires more |
+| Direct binary upload to API | banned by default |
+| Presigned upload object size | product-specific, enforced before issuing intent |
+| HTTP request handling timeout | `30s` maximum for normal endpoints |
+| Database query timeout | `10s` default |
+| Database transaction timeout | `20s` default for HTTP handlers |
+| External provider call timeout | `5s` default unless provider requires longer |
+| Webhook synchronous handling timeout | `5s`; long work is queued |
+| Queue job timeout | job-specific and documented |
+
+Rules:
+- Reject oversized requests before business logic runs.
+- Return `413 PAYLOAD_TOO_LARGE` when body or declared upload size exceeds the endpoint limit.
+- Use object-storage presigned uploads for media and large files; do not stream large blobs through the API container by default.
+- Long-running work moves to BullMQ and returns an accepted/in-progress response.
+- Every external provider call uses a timeout and cancellation path.
+- Propagate `AbortSignal` or equivalent cancellation from request lifecycle into fetch/provider/database helpers where supported.
+- Do not swallow timeout errors; map them to safe error codes and log with request/trace IDs.
+- Timeouts must be shorter than graceful shutdown drain windows so cleanup can complete before Docker sends `SIGKILL`.
+- Use pagination and server-side limits instead of allowing unbounded list/export requests.
+- Expensive exports must run as jobs and expose progress/status endpoints.
+
+### 20.22 Graceful Shutdown
+
+Bun receives `SIGTERM` from Docker on container stop. API and worker processes must drain cleanly.
+
+Shutdown order is mandatory:
+
+1. Set `isShuttingDown = true`.
+2. `/ready` returns `503` immediately.
+3. Stop accepting new HTTP requests.
+4. Drain in-flight HTTP handlers until timeout.
+5. Reject new job enqueue attempts unless explicitly shutdown-safe.
+6. Stop BullMQ workers from taking new jobs.
+7. Let active jobs finish until worker drain timeout.
+8. Ensure active DB transactions finish, commit, or rollback.
+9. Close Drizzle/Bun SQL pool.
+10. Close BullMQ queues, workers, and schedulers.
+11. Close Redis connections.
+12. Flush logs and OpenTelemetry exporters.
+13. Exit with code `0` only after cleanup succeeds or the timeout policy has been applied.
+
+Rules:
+- Do not call `process.exit()` before async cleanup has completed or timed out.
+- Do not start new HTTP work, jobs, or DB transactions after `isShuttingDown` is true.
+- Mark readiness unavailable before closing database, Redis, queue, or telemetry connections.
+- Close the SQL pool only after in-flight HTTP handlers and active worker jobs are drained or timed out.
+- Flush OpenTelemetry after the final shutdown logs/spans have been emitted.
+- Docker Compose `stop_grace_period` for `api` must be at least `30s`.
+- Docker Compose `stop_grace_period` for `worker` must be at least `60s`; media/import-heavy products may require longer.
+- `docker compose down` is not zero-downtime. It is a full environment stop; the goal is clean rollback/closure, not serving availability.
+
+Database transaction rules:
+- All service transactions must use scoped transaction callbacks/helpers.
+- Do not store transaction handles in module-level or global state.
+- Do not pass transaction handles into background jobs, event emitters, timers, or async work that can outlive the request/job handler.
+- If shutdown starts while a request/job transaction is active, let the handler finish within the drain timeout.
+- If an exception or timeout occurs inside a transaction, rollback is mandatory.
+- Long-running transactions are banned in HTTP request handlers; move long work to BullMQ jobs with checkpoints.
+
+BullMQ worker shutdown rules:
+- Workers stop taking new jobs on `SIGTERM`.
+- Active jobs may finish within `WORKER_SHUTDOWN_TIMEOUT_MS`.
+- Jobs must be idempotent because Docker sends `SIGKILL` after `stop_grace_period` expires.
+- Long jobs must checkpoint progress so retry is safe after process termination.
+- Close workers before closing shared Redis connections.
+
+Recommended shutdown environment variables:
+
+```env
+SHUTDOWN_GRACE_MS=30000
+HTTP_DRAIN_TIMEOUT_MS=25000
+WORKER_SHUTDOWN_TIMEOUT_MS=60000
+DB_QUERY_TIMEOUT_MS=10000
+DB_TRANSACTION_TIMEOUT_MS=20000
+OTEL_SHUTDOWN_TIMEOUT_MS=5000
+```
+
+Reference Elysia shutdown implementation:
+
+```typescript
+import { Elysia } from 'elysia'
+import { sql } from './lib/db'
+import { redis } from './lib/redis'
+import { logger } from './lib/logger'
+import { shutdownTelemetry } from './lib/telemetry'
+import { closeQueues, closeWorkers } from './jobs/queues'
+
+let isShuttingDown = false
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    })
+  ])
+}
+
+export const app = new Elysia()
+  .get('/health', () => ({ status: 'ok' }))
+  .get('/ready', async ({ status }) => {
+    if (isShuttingDown) {
+      return status(503, { status: 'shutting_down' })
+    }
+
+    // Keep readiness checks lightweight. Do not run business logic here.
+    await sql`select 1`
+    await redis.ping()
+
+    return { status: 'ready' }
+  })
+  .onBeforeHandle(({ status }) => {
+    if (isShuttingDown) {
+      return status(503, {
+        success: false,
+        error: {
+          code: 'SERVICE_SHUTTING_DOWN',
+          message: 'Service is shutting down. Please retry shortly.'
+        }
+      })
+    }
+  })
+
+const server = app.listen(Number(process.env.PORT ?? 3000))
+
+async function shutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) return
+  isShuttingDown = true
+
+  logger.info({ signal }, 'shutdown started')
+
+  try {
+    await withTimeout(
+      Promise.resolve(server.stop(true)),
+      Number(process.env.HTTP_DRAIN_TIMEOUT_MS ?? 25_000),
+      'http drain'
+    )
+
+    await withTimeout(
+      closeWorkers(),
+      Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS ?? 60_000),
+      'worker shutdown'
+    )
+
+    await closeQueues()
+
+    // Close DB after request handlers and workers are drained.
+    await sql.end()
+    await redis.quit()
+
+    await withTimeout(
+      shutdownTelemetry(),
+      Number(process.env.OTEL_SHUTDOWN_TIMEOUT_MS ?? 5_000),
+      'telemetry shutdown'
+    )
+
+    logger.info('shutdown completed')
+    process.exit(0)
+  } catch (error) {
+    logger.error({ error }, 'shutdown failed')
+    process.exit(1)
+  }
+}
+
+process.once('SIGTERM', shutdown)
+process.once('SIGINT', shutdown)
+```
+
+Reference transaction helper:
+
+```typescript
+import { db } from '../lib/db'
+import { isShuttingDown } from '../lib/shutdown'
+import { AppError } from '../lib/errors'
+
+export async function runInTransaction<T>(
+  fn: Parameters<typeof db.transaction<T>>[0]
+) {
+  if (isShuttingDown()) {
+    throw new AppError('SERVICE_SHUTTING_DOWN', 'Service is shutting down')
+  }
+
+  return db.transaction(async (tx) => {
+    // Never leak tx outside this callback. Drizzle commits on successful
+    // return and rolls back when this callback throws.
+    return fn(tx)
+  })
 }
 ```
 
-If the provider does not include a timestamp, skip this check — do not fabricate one.
+Reference BullMQ worker shutdown:
 
----
+```typescript
+import { Queue, Worker } from 'bullmq'
+import { redisConnection } from '../lib/redis'
 
-**Uniform `.env` convention for all webhook integrations**
+export const mediaQueue = new Queue('media', {
+  connection: redisConnection
+})
 
-All three layers follow the same naming pattern across every provider, making it trivially auditable which providers have which layers configured.
+export const mediaWorker = new Worker(
+  'media',
+  async (job) => {
+    // Job handlers must be idempotent and safe to retry. Use DB status and
+    // checkpoints before doing external side effects.
+    return processMediaJob(job.data)
+  },
+  {
+    connection: redisConnection,
+    concurrency: Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 5)
+  }
+)
 
-```env
-# Pattern: WEBHOOK_<LAYER>_<PROVIDER>=<value>
+export async function closeWorkers() {
+  // Worker.close() stops taking new jobs and waits for active jobs.
+  await mediaWorker.close()
+}
 
-# Layer 1 — IP Whitelist (CIDR ranges, comma-separated)
-WEBHOOK_IP_WHITELIST_PAYMENT=103.4.55.0/24,103.4.56.0/24
-WEBHOOK_IP_WHITELIST_LOGISTICS=202.80.0.0/20
+export async function closeQueues() {
+  await mediaQueue.close()
+}
+```
 
-# Layer 2 — API Key (if provider supports it)
-WEBHOOK_API_KEY_PAYMENT=<hex>
-WEBHOOK_API_KEY_HEADER_PAYMENT=X-Payment-Token
-# WEBHOOK_API_KEY_LOGISTICS — omitted: this provider does not send an API key
+### 20.23 Testing And CI
 
-# Layer 3 — HMAC Signature (always present)
-WEBHOOK_SECRET_PAYMENT=<hex>
-WEBHOOK_SIG_HEADER_PAYMENT=X-Payment-Signature
-WEBHOOK_SIG_PREFIX_PAYMENT=sha256=
+Required backend checks:
+- `bun install --frozen-lockfile`
+- formatting check
+- lint
+- TypeScript typecheck
+- unit tests for services and pure utilities
+- integration tests with PostgreSQL and Redis
+- OpenAPI generation/drift check
+- Drizzle migration check
+- Docker build
+- Docker image API command smoke test
+- Docker image worker command smoke test
+- auth/JWT/JWKS tests
+- CORS and cookie/CSRF policy tests when browser clients use cookies
+- RBAC and scope authorization tests
+- multi-tenant isolation tests
+- idempotency tests
+- rate limit policy tests
+- cache invalidation tests for permissions and high-risk cached reads
+- timeout/body-size tests for large and slow requests
+- media upload/download flow tests
+- webhook signature and replay tests
+- worker retry/failure tests
+- queue retry, backoff, DLQ, and manual replay tests
 
-WEBHOOK_SECRET_LOGISTICS=<hex>
-WEBHOOK_SIG_HEADER_LOGISTICS=X-Logistics-Hmac
-WEBHOOK_SIG_PREFIX_LOGISTICS=
+### 20.24 Deployment: Docker Compose + Nginx On VPS
 
-# General
-WEBHOOK_TIMEOUT_MS=5000        # abort handler if synchronous steps exceed this
-WEBHOOK_MAX_AGE_MS=300000      # 5 minutes — reject events older than this
+Backend production deployments use Docker Compose on VPS behind Nginx.
+
+Baseline services:
+
+```text
+nginx
+api
+worker
+postgres
+pgbouncer
+redis
+otel-collector
+prometheus
+loki
+tempo
+grafana
+certbot
+```
+
+Optional project services:
+
+```text
+minio
+mailpit
+bull-board
+```
+
+Deployment topology:
+
+```mermaid
+flowchart TB
+    Internet[Internet] --> Nginx[Nginx :80/:443]
+    Nginx --> API[api container :3000]
+
+    API --> PgBouncer[pgbouncer]
+    PgBouncer --> Postgres[(postgres)]
+    API --> Redis[(redis)]
+    API --> Storage[S3-compatible storage]
+
+    Worker[worker container] --> PgBouncer
+    Worker --> Redis
+    Worker --> Storage
+
+    API --> OTel[otel-collector]
+    Worker --> OTel
+    OTel --> Prometheus[prometheus]
+    OTel --> Loki[loki]
+    OTel --> Tempo[tempo]
+    Prometheus --> Grafana[grafana]
+    Loki --> Grafana
+    Tempo --> Grafana
+
+    Certbot[certbot] --> Nginx
+```
+
+#### 20.24.1 Dockerfile Standard
+
+Backend projects use one Bun application image for both the API process and worker process. Docker Compose changes runtime behavior through the container command.
+
+Rules:
+- Use `oven/bun:<pinned-version>` as the base image. Do not use `latest`.
+- Build one application image, for example `example-api:${TAG}`.
+- The `api` service uses the image default command.
+- The `worker` service uses the same image with `command: ["bun", "run", "worker"]`.
+- Do not create separate API and worker images unless the project has a documented size, security, or dependency-isolation reason.
+- Runtime containers run as a non-root user.
+- The application image exposes only the internal API port, usually `3000`.
+- The application image must not publish host ports; host binding belongs to Nginx only.
+- Do not bake secrets into Docker images through `ARG`, `ENV`, copied `.env` files, generated config, or build logs.
+- Do not copy `.git`, local caches, test reports, coverage, Playwright artifacts, `.env*`, or source maps into production images unless explicitly approved.
+- Require `bun.lock` and install with `bun install --frozen-lockfile`.
+
+Recommended multi-stage Dockerfile:
+
+```dockerfile
+FROM oven/bun:<pinned-version> AS deps
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+FROM oven/bun:<pinned-version> AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN bun run typecheck
+RUN bun run build
+
+FROM oven/bun:<pinned-version> AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+COPY --from=build /app/dist ./dist
+
+USER bun
+EXPOSE 3000
+CMD ["bun", "run", "start"]
+```
+
+Recommended Compose usage:
+
+```yaml
+services:
+  api:
+    image: example-api:${TAG}
+    expose:
+      - "3000"
+    stop_grace_period: 30s
+
+  worker:
+    image: example-api:${TAG}
+    command: ["bun", "run", "worker"]
+    stop_grace_period: 60s
+```
+
+Required `.dockerignore` baseline:
+
+```text
+.env
+.env.*
+.git
+node_modules
+.venv
+coverage
+test-results
+playwright-report
+.cache
+.turbo
+.DS_Store
+```
+
+Project-specific `.dockerignore` rules:
+- Exclude raw documentation, wiki exports, screenshots, local data dumps, and generated artifacts that are not required at runtime.
+- Keep migration files if production migration execution depends on the image.
+- Keep OpenAPI generation inputs only when runtime docs or CI jobs need them.
+- Never exclude files needed by `bun run build`, runtime startup, migrations, or worker execution.
+
+Image verification:
+- CI builds the Docker image.
+- CI runs a smoke test for the API command.
+- CI runs a smoke test for the worker command.
+- CI verifies the image starts without secrets baked into the image.
+
+### 20.25 Environment Variables
+
+`.env.example` is the source of truth for required runtime configuration.
+
+Categories:
+
+```text
+APP
+HTTP
+DATABASE
+REDIS
+JWT
+CORS
+RBAC
+RATE_LIMIT
+STORAGE
+QUEUE
+TELEMETRY
+LOGGING
+PUSH
+EMAIL
+WEBHOOK
+VAULT
 ```
 
 Rules:
-- One set of secrets per provider. Never share secrets across providers.
-- All secrets are stored in Vault (§14.2) for staging/production. Never in source code.
-- If a provider does not support a layer (e.g., no IP list, no API key), omit that variable — do not set a dummy value.
-- Adding a new third-party integration requires configuring all three layers and documenting which layers the provider supports in the integration's ADR.
+- Local development uses `.env`.
+- Staging and production use Vault or the approved secrets manager.
+- Never bake secrets into Docker images.
+- Every new env var is added to `.env.example`.
+- JWT private keys and refresh token secrets are secrets, not config.
+
+### 20.26 Backup, Retention, And Recovery
+
+Rules:
+- PostgreSQL backups are mandatory.
+- Object storage backup/versioning policy is mandatory.
+- Redis is not a source of truth unless an ADR explicitly says otherwise.
+- Restore drill is required before production launch.
+- Audit log retention is defined per product.
+- Telemetry retention is defined per environment.
+- Media deletion lifecycle must define soft delete, physical delete, and recovery windows.
+
+### 20.27 Standard Directory Layout
+
+```text
+src/
+  index.ts
+  app.ts
+  controllers/
+    auth.controller.ts
+    workspace.controller.ts
+    health.controller.ts
+    media.controller.ts
+    webhook.controller.ts
+  services/
+    auth.service.ts
+    rbac.service.ts
+    workspace.service.ts
+    media.service.ts
+    webhook.service.ts
+  db/
+    schema.ts
+    migrations/
+  jobs/
+    queues.ts
+    workers/
+      webhook.worker.ts
+      media.worker.ts
+      notification.worker.ts
+  lib/
+    env.ts
+    db.ts
+    redis.ts
+    logger.ts
+    telemetry.ts
+    errors.ts
+    response.ts
+    jwt.ts
+    jwks.ts
+    rbac.ts
+    rate-limit.ts
+    idempotency.ts
+    storage.ts
+    webhook-verify.ts
+  types/
+    api.ts
+    errors.ts
+    auth.ts
+  utils/
+    pagination.ts
+    cursor.ts
+tests/
+  integration/
+  e2e/
+Dockerfile
+docker-compose.yml
+.env.example
+```
+
+Rules:
+- Controllers own HTTP routing, route schemas, auth guards, OpenAPI metadata, and response mapping.
+- Services own business logic, transactions, authorization-adjacent domain rules, and orchestration.
+- Workers call services and never duplicate controller logic.
+- `lib/` owns cross-cutting infrastructure and reusable adapters.
+- Generated OpenAPI client code does not live in the backend repo unless a project explicitly generates SDK artifacts.
+
+### 20.28 Anti-Patterns
+
+The following are banned:
+
+| Anti-pattern | Alternative |
+|---|---|
+| Eden Treaty as the official dashboard/mobile/public API contract | OpenAPI 3.1 + generated clients |
+| `HS256` for production SaaS/public API JWTs | Asymmetric `jose` signing with JWK/JWKS and `kid` |
+| JWT authorization without RBAC/scope checks | JWT identity + workspace membership + RBAC/scopes + resource ownership |
+| Global roles without workspace context | Tenant-scoped memberships and roles |
+| Missing `workspace_id` filters on tenant-owned queries | Mandatory tenant-scoped service queries |
+| Returning raw Elysia/Zod/SQL errors | Standard error envelope with safe codes |
+| Storing blob files or base64 in PostgreSQL | S3-compatible object storage + DB metadata/object keys |
+| Public-read storage buckets by default | Private bucket + presigned URLs |
+| Processing uploads synchronously in HTTP request | BullMQ worker processing |
+| Redis as source of truth for durable business data | PostgreSQL source of truth, Redis cache/queue only |
+| Missing idempotency for unsafe public writes | `Idempotency-Key` with request hash and stored result |
+| Blocking HTTP response on email/push/provider call | Enqueue BullMQ job and respond promptly |
+| Webhook JSON parse before signature verification | Verify raw body first |
+| Missing telemetry in API or worker | OpenTelemetry from day one |
+| High-cardinality metric labels | Low-cardinality route/status/job/provider labels |
+| Logging tokens, cookies, API keys, request bodies, or PII | Redacted structured logs |
+| Exposing API container ports to the host | Nginx is the only host-facing service |
+| Running workers inside the API process | Separate worker process/container |
+| Manual DB schema changes | Drizzle migrations |
+| Using `oven/bun:latest` | Pinned Bun image version |
+| Separate API and worker images without a concrete reason | One application image with different Compose commands |
+| Running production containers as root | Non-root runtime user |
+| Baking secrets into Docker images | Runtime environment injection through Vault or approved secrets manager |
+| Retrying permanent provider or validation errors | Classify transient vs terminal failures before retrying |
+| Bulk jobs starving critical queues | Separate queues, priorities, and concurrency limits |
+| Infinite retries or unbounded backoff | Bounded attempts, capped exponential backoff, DLQ, and alerting |
 
 ---
+
+## 21. Open Questions
+
+All current architectural decisions for the baseline backend stack are resolved. Product-specific choices such as exact push provider, storage provider, API deprecation window, and retention periods must be documented per project.
