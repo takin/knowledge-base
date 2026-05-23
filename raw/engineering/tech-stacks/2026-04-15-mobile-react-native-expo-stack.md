@@ -3,6 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
+Updated: 2026-05-23
 Status: Draft
 Scope: React Native mobile applications using Expo Router and NativeWind
 
@@ -41,5 +42,9 @@ Rules:
 - NativeWind v4 requires the Babel preset — ensure `babel.config.js` is configured per the NativeWind v4 setup guide.
 - Do not use React Native's `StyleSheet.create()` for product UI — use NativeWind utility classes. `StyleSheet` is permitted only for performance-critical animations or third-party library integration.
 - **Maestro** is the standard mobile E2E test runner. It uses a declarative YAML flow DSL (`- tapOn:`, `- assertVisible:`) that AI coding agents generate accurately and consistently. Detox requires native build coupling and imperative JavaScript that is harder for agents to produce correctly. Maestro flows live in `tests/e2e/` alongside Playwright web tests.
+- Mobile test files must live in the top-level `tests/` hierarchy, not beside implementation files under `src/` or `app/`.
+- Unit tests live in `tests/unit/`, integration tests live in `tests/integration/`, and Maestro E2E flows live in `tests/e2e/`.
+- Shared mobile test helpers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+- Do not use adjacent `__tests__/` directories or colocated `*.test.*` / `*.spec.*` files inside implementation folders.
 
 ---

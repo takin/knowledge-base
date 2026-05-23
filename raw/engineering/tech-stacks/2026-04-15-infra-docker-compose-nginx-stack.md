@@ -3,6 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
+Updated: 2026-05-23
 Status: Draft
 Scope: Docker Compose, Nginx, Vault, deploy, scalability tiers, and Kubernetes upgrade path
 
@@ -29,7 +30,7 @@ Secrets management is tiered by environment:
 
 **Deployment model:**
 - Vault runs as a Docker container, added to the product's infrastructure Docker Compose (or a shared ops Compose stack).
-- Storage backend: **PostgreSQL** (reuses the existing database cluster — no additional infrastructure needed).
+- Storage backend: **PostgreSQL 18+** (reuses the existing database cluster — no additional infrastructure needed).
 - Single-node for now. High-availability can be added when the team scales.
 - Vault is initialized once and unsealed via auto-unseal (using a cloud KMS key) or a manually stored unseal key held by the designated architecture owner.
 
@@ -61,7 +62,7 @@ APP_ENV=development          # development | staging | production
 APP_URL=http://localhost:3000
 
 # Database
-# Staging/production DATABASE_URL points to PgBouncer, not directly to Postgres.
+# Staging/production DATABASE_URL points to PgBouncer, not directly to PostgreSQL 18+.
 DATABASE_URL=postgresql://...
 
 # Auth (JWT / JOSE)
@@ -110,14 +111,20 @@ This reverse-proxy shape is for backend APIs and approved runtime application pr
 
 The deployment artifact must include both:
 - an API image, usually based on `oven/bun`, running the backend service or another approved runtime process;
-- an Nginx gateway image, based on the approved Nginx+Brotli image, bound to host ports.
+- an Nginx gateway image, based on `fholzer/nginx-brotli:<pinned-version>`, bound to host ports.
 
 The API image must not publish host ports. Direct outside access to the API process bypasses security headers, Brotli/Gzip compression, coarse edge rate limiting, request-size limits, and upstream retry behavior.
 
+Nginx image rules:
+- The main Nginx gateway must use `fholzer/nginx-brotli:<pinned-version>` directly or through a minimal wrapper image whose `FROM` line is `fholzer/nginx-brotli:<pinned-version>`.
+- Do not use stock `nginx`, `nginx:latest`, `fholzer/nginx-brotli:latest`, Caddy, or a custom Nginx build unless an ADR approves it.
+- Brotli compression is on by default with `NGINX_BROTLI_ENABLED=on`; gzip remains on as fallback with `NGINX_GZIP_ENABLED=on`.
+- Certbot must not be installed in the Nginx image. Certificate issuance and renewal belong to the Certbot sidecar.
+
 ```
 [Client] → [Nginx :80/:443] → [API container :3000]
-                            → [PgBouncer :5432] → [Postgres]
-                            → [Redis :6379]
+                            → [PgBouncer :5432] → [PostgreSQL 18+]
+                            → [Redis 8+ :6379]
 ```
 
 Required Compose shape:
@@ -154,15 +161,35 @@ services:
       - redis
 
   nginx:
+    build:
+      context: ./nginx
     image: example-api-nginx:${TAG}
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
     environment:
       NGINX_UPSTREAM_HOST: api
       NGINX_UPSTREAM_PORT: 3000
+      NGINX_SERVER_NAME: api.example.com
+      NGINX_BROTLI_ENABLED: "on"
+      NGINX_GZIP_ENABLED: "on"
+      LETSENCRYPT_EMAIL: ops@example.com
     depends_on:
       - api
+
+  certbot:
+    image: certbot/certbot:<pinned-version>
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    command: ["certonly", "--webroot", "--webroot-path", "/var/www/certbot", "--email", "${LETSENCRYPT_EMAIL}", "--agree-tos", "--no-eff-email", "-d", "${NGINX_SERVER_NAME}"]
+
+volumes:
+  letsencrypt:
+  certbot-webroot:
 ```
 
 ### 19.1.1 Backend API + Worker + Observability Profile
@@ -175,15 +202,16 @@ Baseline services:
 nginx
 api
 worker
-postgres
+postgres 18+
 pgbouncer
-redis
+redis 8+
 otel-collector
 prometheus
 loki
 tempo
 grafana
 certbot
+certbot-renew
 ```
 
 Optional project services:
@@ -199,9 +227,12 @@ Rules:
 - `api` handles HTTP traffic only.
 - `worker` processes BullMQ jobs only.
 - Do not run BullMQ workers inside the API process in production.
-- `api` and `worker` both connect to PgBouncer, Redis, object storage, and OpenTelemetry Collector.
-- Redis is mandatory for BullMQ, rate limiting, permission cache, and short-lived coordination.
-- PgBouncer runs in transaction mode.
+- `api` and `worker` both connect to PgBouncer, Redis 8+, object storage, and OpenTelemetry Collector.
+- PostgreSQL 18+ is the baseline durable database service.
+- Redis 8+ is mandatory for BullMQ, rate limiting, permission cache, and short-lived coordination.
+- PgBouncer runs in transaction mode and connects to PostgreSQL 18+.
+- The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
+- A Certbot sidecar is mandatory for production Let's Encrypt issuance and renewal; do not install Certbot into the Nginx or API image.
 - `api` and `worker` use separate `stop_grace_period` values because HTTP drain and job drain have different timing needs.
 - `api` `stop_grace_period` must be at least `30s`.
 - `worker` `stop_grace_period` must be at least `60s`; media/import-heavy projects may require longer.
@@ -216,12 +247,12 @@ flowchart TB
     Nginx --> API[api container :3000]
 
     API --> PgBouncer[pgbouncer]
-    PgBouncer --> Postgres[(postgres)]
-    API --> Redis[(redis)]
+    PgBouncer --> Postgres[(postgres 18+)]
+    API --> Redis[(redis 8+)]
     API --> Storage[S3-compatible storage]
 
     Worker[worker container] --> PgBouncer
-    Worker --> Redis
+    Worker --> Redis8[(redis 8+)]
     Worker --> Storage
 
     API --> OTel[otel-collector]
@@ -233,12 +264,21 @@ flowchart TB
     Loki --> Grafana
     Tempo --> Grafana
 
-    Certbot[certbot] --> Nginx
+    Certbot[certbot issuance sidecar] --> Nginx
+    CertbotRenew[certbot renewal sidecar] --> Nginx
 ```
 
 ### 19.2 Docker image: Nginx + Brotli
 
-The standard Nginx Docker image does not include Brotli. Use **`fholzer/nginx-brotli`** as the base image — it ships the `ngx_brotli` module pre-compiled against the latest stable Nginx.
+The standard Nginx Docker image does not include Brotli. Use **`fholzer/nginx-brotli:<pinned-version>`** as the required base image for every main Nginx gateway in this stack. It ships the `ngx_brotli` module pre-compiled against stable Nginx.
+
+Rules:
+- The main host-facing Nginx service must use `fholzer/nginx-brotli:<pinned-version>` directly or through a minimal wrapper image.
+- Wrapper images may copy `nginx.conf.template` and `entrypoint.sh`, but their first runtime-stage `FROM` line must be `fholzer/nginx-brotli:<pinned-version>`.
+- Do not use stock `nginx`, `nginx:latest`, `fholzer/nginx-brotli:latest`, or a custom Brotli build unless an ADR approves it.
+- Brotli is enabled by default through `NGINX_BROTLI_ENABLED=on`.
+- Gzip fallback is enabled by default through `NGINX_GZIP_ENABLED=on`.
+- Do not install Certbot, application code, build tools, database clients, or certificate-generation scripts into the Nginx image.
 
 For static SPA dashboard deployments, use `fholzer/nginx-brotli:<pinned-version>` directly in the dashboard runtime stage. Do not create a separate `nginx/Dockerfile` and do not install Certbot into the dashboard image.
 
@@ -264,7 +304,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 ```sh
 #!/bin/sh
 set -e
-envsubst '${NGINX_UPSTREAM_HOST} ${NGINX_UPSTREAM_PORT} ${NGINX_BROTLI_ENABLED}
+envsubst '${NGINX_SERVER_NAME} ${NGINX_UPSTREAM_HOST} ${NGINX_UPSTREAM_PORT} ${NGINX_BROTLI_ENABLED}
            ${NGINX_GZIP_ENABLED} ${NGINX_WORKER_PROCESSES} ${NGINX_WORKER_CONNECTIONS}
            ${NGINX_KEEPALIVE_TIMEOUT} ${NGINX_CLIENT_MAX_BODY_SIZE}
            ${NGINX_RATE_LIMIT_RPS} ${NGINX_SSL_ENABLED}' \
@@ -372,7 +412,7 @@ http {
 
     server {
         listen 80;
-        server_name _;
+        server_name ${NGINX_SERVER_NAME};
 
         # Security headers are repeated in locations that set their own headers because
         # nginx does not inherit parent add_header directives in that case.
@@ -382,6 +422,12 @@ http {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
         add_header Cross-Origin-Opener-Policy "same-origin" always;
+
+        # ACME HTTP-01 challenge files are written by the Certbot sidecar into
+        # the shared certbot-webroot volume mounted at /var/www/certbot.
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
 
         location /health {
             add_header Strict-Transport-Security $hsts_header always;
@@ -497,12 +543,61 @@ Compression applies to: `text/html`, `text/css`, `text/javascript`, `application
 
 Do **not** compress: already-compressed formats (`image/jpeg`, `image/png`, `image/webp`, `image/avif`, `video/*`, `audio/*`, `.gz`, `.zip`).
 
+### 19.3.1 Let's Encrypt Certbot Sidecar Contract
+
+Production deployments must use a Certbot sidecar for Let's Encrypt certificate issuance and renewal. The Nginx gateway terminates TLS; Certbot only writes certificates and ACME challenge files into shared Docker volumes.
+
+Compose requirements:
+- `nginx` mounts `letsencrypt:/etc/letsencrypt:ro`.
+- `nginx` mounts `certbot-webroot:/var/www/certbot:ro`.
+- `certbot` mounts `letsencrypt:/etc/letsencrypt` read-write.
+- `certbot` mounts `certbot-webroot:/var/www/certbot` read-write.
+- `certbot` does not bind host ports.
+- `certbot` uses `certbot/certbot:<pinned-version>`, never `latest`.
+
+Initial certificate issuance command:
+
+```yaml
+certbot:
+  image: certbot/certbot:<pinned-version>
+  volumes:
+    - letsencrypt:/etc/letsencrypt
+    - certbot-webroot:/var/www/certbot
+  command: ["certonly", "--webroot", "--webroot-path", "/var/www/certbot", "--email", "${LETSENCRYPT_EMAIL}", "--agree-tos", "--no-eff-email", "-d", "${NGINX_SERVER_NAME}"]
+```
+
+Renewal sidecar command:
+
+```yaml
+certbot-renew:
+  image: certbot/certbot:<pinned-version>
+  volumes:
+    - letsencrypt:/etc/letsencrypt
+    - certbot-webroot:/var/www/certbot
+  entrypoint: ["/bin/sh", "-c"]
+  command: ["trap exit TERM; while :; do certbot renew --webroot --webroot-path /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+```
+
+Nginx must reload after successful renewal. The project deploy/ops script owns the reload step, for example `docker compose exec nginx nginx -s reload` after a renewal run reports changed certificates. Do not give the Certbot container Docker socket access unless a security ADR approves it.
+
+Certificate lifecycle rules:
+- Certificate files live in Docker volumes, never in Git, image layers, or copied application assets.
+- Certificate issuance and renewal must not require rebuilding the API, worker, or Nginx image.
+- Do not generate certificates in `nginx/entrypoint.sh`.
+- Do not install Certbot into the Nginx image.
+- Self-signed certificates are banned in production.
+- Expired certificates are a production-blocking failure.
+- Port 80 must serve `/.well-known/acme-challenge/` from `/var/www/certbot` for ACME HTTP-01 validation.
+- Production HTTP traffic other than ACME challenge files and approved public health checks should redirect to HTTPS.
+- Production TLS certificates are read by Nginx from `/etc/letsencrypt/live/${NGINX_SERVER_NAME}/fullchain.pem` and `/etc/letsencrypt/live/${NGINX_SERVER_NAME}/privkey.pem`.
+
 ### 19.4 Runtime-configurable environment variables
 
 All Nginx tuning parameters are injected via environment variables at container startup through `envsubst`. This makes every deployment environment independently configurable without rebuilding the image.
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `NGINX_SERVER_NAME` | `localhost` | Public DNS name used by Nginx and Let's Encrypt certificate paths |
 | `NGINX_UPSTREAM_HOST` | `api` | Docker Compose service name of the API container |
 | `NGINX_UPSTREAM_PORT` | `3000` | Port the API container listens on |
 | `NGINX_BROTLI_ENABLED` | `on` | Enable/disable Brotli compression (`on` / `off`) |
@@ -513,6 +608,7 @@ All Nginx tuning parameters are injected via environment variables at container 
 | `NGINX_CLIENT_MAX_BODY_SIZE` | `1m` | Max backend API request body size; media uses presigned object-storage uploads |
 | `NGINX_RATE_LIMIT_RPS` | `20` | Requests per second per IP before 429 |
 | `NGINX_SSL_ENABLED` | `off` | Enable TLS termination at Nginx (`on` in production) |
+| `LETSENCRYPT_EMAIL` | empty | Email passed to Certbot for certificate issuance and expiry notices |
 
 All variables have sensible defaults. Local development requires only `NGINX_UPSTREAM_HOST` and `NGINX_UPSTREAM_PORT` in `.env`.
 
@@ -768,10 +864,10 @@ The combined zero-downtime guarantee requires **both** the deploy script (for or
 | Component | Limit without mitigation | Mitigation in this stack | Headroom |
 |---|---|---|---|
 | Bun + Elysia | ~100K req/s | — | Ample |
-| Postgres (raw connections) | ~100 concurrent | PgBouncer transaction mode | 2K+ API conns → ~50 Postgres conns |
+| PostgreSQL 18+ (raw connections) | ~100 concurrent | PgBouncer transaction mode | 2K+ API conns → ~50 PostgreSQL conns |
 | Drizzle pool per instance | Unbounded (risk) | `DB_POOL_MAX=20` per instance | Controlled |
-| Redis | ~100K ops/s | — | Ample |
-| Hot reads hitting Postgres | Collapses under load | Redis query cache (§20.6) | 80–95% cache hit rate on master data |
+| Redis 8+ | ~100K ops/s | Redis 8+ Cluster at Tier 3 | Ample |
+| Hot reads hitting PostgreSQL | Collapses under load | Redis 8+ query cache (§20.6) | 80–95% cache hit rate on master data |
 | Single instance CPU | Saturation at ~5K concurrent | Nginx `least_conn` upstream + horizontal scale | Linear scale-out |
 | Response payload size | Bandwidth waste | Nginx Brotli compression (§19) | 15–25% smaller payloads |
 
@@ -787,7 +883,7 @@ The infrastructure is designed to scale from 100 to 100K concurrent without arch
 
 | Component | Specification | Count | Purpose |
 |---|---|---|---|
-| All services | 2 vCPU / 4GB | 1 | Nginx, Elysia API, PgBouncer, PostgreSQL, Redis co-located on single VM |
+| All services | 2 vCPU / 4GB | 1 | Nginx, Elysia API, PgBouncer, PostgreSQL 18+, Redis 8+ co-located on single VM |
 | **Total** | 2 vCPU / 4GB | 1 VM | |
 
 **Orchestration:** Docker Compose, single VM. All services run on one host — suitable for MVP, prototypes, and early customer validation.
@@ -800,12 +896,12 @@ The infrastructure is designed to scale from 100 to 100K concurrent without arch
 
 | Component | Specification | Count | Purpose |
 |---|---|---|---|
-| Nginx | 4 vCPU / 8GB | 1 | Load balancer, Brotli, TLS termination |
+| Nginx (`fholzer/nginx-brotli`) | 4 vCPU / 8GB | 1 | Load balancer, Brotli, TLS termination |
 | Elysia API | 4 vCPU / 8GB | 1–2 | API server |
 | BullMQ worker | 2–4 vCPU / 4–8GB | 1–2 | Async job processing |
 | PgBouncer | co-located | 1 | Connection pooling |
-| PostgreSQL | 8 vCPU / 32GB SSD | 1 | Primary database |
-| Redis | 2 vCPU / 4GB | 1 | Caching, rate limiting, BullMQ |
+| PostgreSQL 18+ | 8 vCPU / 32GB SSD | 1 | Primary database |
+| Redis 8+ | 2 vCPU / 4GB | 1 | Caching, rate limiting, BullMQ |
 | **Total** | ~22–44 vCPU / 84–168GB | ~5–7 VMs | |
 
 **Orchestration:** Docker Compose. Scale with `docker compose up -d --scale api=2 --scale worker=2`.
@@ -838,8 +934,8 @@ flowchart LR
 
     subgraph Data
         PGB[PgBouncer<br/>transaction mode]
-        DB[(PostgreSQL<br/>Tenant-scoped tables)]
-        RC[(Redis<br/>Cache · Rate Limit)]
+        DB[(PostgreSQL 18+<br/>Tenant-scoped tables)]
+        RC[(Redis 8+<br/>Cache · Rate Limit)]
         S3[Cloudflare R2<br/>File Storage]
     end
 
@@ -859,9 +955,9 @@ flowchart LR
 | Elysia API | 4 vCPU / 8GB | 4–6 |
 | BullMQ workers | 4 vCPU / 8GB | 2–4 |
 | PgBouncer | 2 vCPU / 4GB | 1 |
-| PostgreSQL primary | 16 vCPU / 64GB NVMe | 1 |
-| PostgreSQL read replica | 8 vCPU / 32GB | 1–2 |
-| Redis | 4 vCPU / 8GB | 1 |
+| PostgreSQL 18+ primary | 16 vCPU / 64GB NVMe | 1 |
+| PostgreSQL 18+ read replica | 8 vCPU / 32GB | 1–2 |
+| Redis 8+ | 4 vCPU / 8GB | 1 |
 | OpenTelemetry + Grafana stack | workload-specific | 1 set |
 | **Total** | ~70–100 vCPU | ~10–13 VMs |
 
@@ -876,9 +972,9 @@ flowchart LR
 | Nginx (edge) | 8 vCPU / 16GB | 2 |
 | Elysia API (K8s pods with HPA) | 4 vCPU / 8GB | 6–12 |
 | PgBouncer | 2 vCPU / 4GB | 2 |
-| PostgreSQL primary | 32 vCPU / 128GB NVMe | 1 |
-| PostgreSQL read replica | 16 vCPU / 64GB | 3 |
-| Redis Cluster (3 master + 3 replica) | 4 vCPU / 16GB | 6 |
+| PostgreSQL 18+ primary | 32 vCPU / 128GB NVMe | 1 |
+| PostgreSQL 18+ read replica | 16 vCPU / 64GB | 3 |
+| Redis 8+ Cluster (3 master + 3 replica) | 4 vCPU / 16GB | 6 |
 | BullMQ workers (K8s) | 4 vCPU / 8GB | 3–5 |
 | OpenTelemetry + Grafana stack | workload-specific | 1 set |
 | **Total** | ~150–220 vCPU / 620–760GB | ~23–30 VMs |
@@ -894,7 +990,7 @@ Cloudflare Business Plan: **+$200 USD/month**. ROI is highest at scale — absor
 | Concurrency | Primary cost driver | Scaling mechanism |
 |---|---|---|
 | 2K → 10K | Database (read replicas, NVMe) | Add read replicas, PgBouncer pool size |
-| 10K → 100K | API instances, workers, and Redis Cluster | K8s HPA, independent worker scale, Redis Cluster sharding |
+| 10K → 100K | API instances, workers, and Redis 8+ Cluster | K8s HPA, independent worker scale, Redis 8+ Cluster sharding |
 | 100K+ | Multi-region, CDN edge | Geo-distributed deployment |
 
 ---
@@ -907,8 +1003,8 @@ At 100K concurrent, three new bottlenecks emerge that require Kubernetes orchest
 
 | Bottleneck | Why it appears | Mitigation |
 |---|---|---|
-| Single Redis node ceiling | ~100K ops/sec limit hit under full load | Redis Cluster (3 masters + 3 replicas) |
-| Single Postgres primary write pressure | Replication lag under sustained write burst | 3–5 read replicas, route reads via PgBouncer |
+| Single Redis 8+ node ceiling | ~100K ops/sec limit hit under full load | Redis 8+ Cluster (3 masters + 3 replicas) |
+| Single PostgreSQL 18+ primary write pressure | Replication lag under sustained write burst | 3–5 read replicas, route reads via PgBouncer |
 | Docker Compose not an orchestrator | No autoscale, no rolling deploy, no self-healing | Kubernetes with HPA |
 | OS file descriptor limit | Linux default `ulimit -n 1024` hard-stops at ~1K conns | Set `ulimit -n 500000` at OS level |
 
@@ -1049,9 +1145,9 @@ spec:
       app: api
 ```
 
-#### Redis Cluster for 100K+ concurrent
+#### Redis 8+ Cluster for 100K+ concurrent
 
-Single-node Redis ceiling is ~100K ops/sec. At 100K concurrent, a Redis Cluster (3 masters + 3 replicas) is required:
+Single-node Redis 8+ ceiling is ~100K ops/sec. At 100K concurrent, a Redis 8+ Cluster (3 masters + 3 replicas) is required:
 
 ```env
 REDIS_URL=redis://redis-cluster:6379  # ioredis handles cluster transparently
@@ -1075,7 +1171,7 @@ This is required on every host running API containers. Without it, the OS will r
 |---|---|---|
 | Config | All params in `.env` | K8s ConfigMaps/Secrets replace `.env` with no code change |
 | DB connection | `DATABASE_URL` → PgBouncer | Adding read replicas = changing one env var |
-| Redis | Single node URL | Redis Cluster URL is the same format — `ioredis` handles both |
+| Redis 8+ | Single node URL | Redis 8+ Cluster URL is the same format — `ioredis` handles both |
 | API instances | `docker compose up -d --scale api=2` | K8s HPA scales pods automatically on CPU/request metrics |
 | Nginx upstream | One `server api:3000` line | Add replica entries; `least_conn` already configured |
 | Health checks | `/health` + `/ready` endpoints | K8s liveness + readiness probes use these directly |
@@ -1106,14 +1202,14 @@ flowchart TD
     end
     
     subgraph DB["Database Layer"]
-        PG1[(Postgres Primary<br/>32 vCPU / 128GB NVMe)]
+        PG1[(PostgreSQL 18+ Primary<br/>32 vCPU / 128GB NVMe)]
         PG2[(Read Replica ×3<br/>16 vCPU / 64GB)]
     end
     
-    subgraph Cache["Redis Cluster (3 master + 3 replica)"]
-        R1[(Redis Master 1<br/>4 vCPU / 16GB)]
-        R2[(Redis Master 2)]
-        R3[(Redis Master 3)]
+    subgraph Cache["Redis 8+ Cluster (3 master + 3 replica)"]
+        R1[(Redis 8+ Master 1<br/>4 vCPU / 16GB)]
+        R2[(Redis 8+ Master 2)]
+        R3[(Redis 8+ Master 3)]
     end
     
     subgraph Workers["BullMQ Workers (K8s, scaled independently)"]

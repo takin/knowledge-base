@@ -11,13 +11,13 @@ Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stac
 
 ## Summary
 
-This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, backend-owned SaaS administration for tenants/users/subscriptions/soft locks, PostgreSQL/Drizzle/PgBouncer for durable data, Redis/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
+This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, backend-owned SaaS administration for tenants/users/subscriptions/soft locks, PostgreSQL 18+/Drizzle/PgBouncer for durable data, Redis 8+/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
 
 The stack has two product profiles:
 - `internal-api` for dashboards, mobile apps, internal operators, and first-party machine clients.
 - `public-api` for external developers, partners, customer systems, and public machine clients.
 
-Both profiles expose REST JSON under `/api/v1`, generate OpenAPI 3.1, use JWT/JWKS/RBAC/scopes, require Redis and BullMQ from day one, and deploy behind Nginx with Docker Compose.
+Both profiles expose REST JSON under `/api/v1`, generate OpenAPI 3.1, use JWT/JWKS/RBAC/scopes, require Redis 8+ and BullMQ from day one, and deploy behind Nginx with Docker Compose.
 
 ## Runtime And Toolchain
 
@@ -249,12 +249,23 @@ Mandatory audit events include tenant lifecycle changes, member invitations/remo
 Elysia/TypeBox handles HTTP boundary validation. Zod handles business/domain validation inside services.
 
 Database rules:
-- PostgreSQL is mandatory.
+- PostgreSQL 18+ is mandatory.
 - Drizzle is the mandatory ORM/query builder.
 - Use PgBouncer in transaction mode for staging and production.
 - API and worker `DATABASE_URL` values point to PgBouncer, not directly to Postgres.
 - Drizzle/Bun SQL pools are bounded per API/worker instance.
 - Raw SQL strings are banned unless using Drizzle's parameterized `sql` helper with a documented reason.
+
+Primary key strategy:
+- Choose primary keys by workload, exposure, and relational fan-out.
+- Default to UUID v7 for entity tables that are not write-hot, especially when IDs are exposed through APIs, URLs, webhooks, exports, or cross-system integrations.
+- Use `BIGINT GENERATED ALWAYS AS IDENTITY` for high-ingestion, append-heavy, transaction-heavy, or large fan-out tables where storage, index size, FK cost, and insert locality matter.
+- UUID v7 keys must use PostgreSQL 18+'s built-in `uuidv7()` as the database-side default.
+- Application code must not generate primary keys by default unless an ADR approves it.
+- Do not use `serial`, `bigserial`, or UUID v4 for new primary keys unless an ADR documents the reason.
+- High-ingestion tables that need public IDs use an internal BIGINT primary key plus `public_id UUID NOT NULL DEFAULT uuidv7() UNIQUE`.
+
+Default UUID v7 candidates include users, workspaces, organizations, roles, API clients, products, customers, configuration tables, and reference/master data that is not write-hot. Default BIGINT identity candidates include orders, order items, order events, ledger entries, audit logs, webhook events, outbox messages, notification deliveries, job runs, metrics events, and append-only/high-volume logs.
 
 Migration rules:
 - Every schema change is a committed Drizzle migration.
@@ -308,7 +319,7 @@ Use object-storage presigned uploads for media and large files. Propagate `Abort
 
 ## Redis, BullMQ, And Queue Handling
 
-Redis and BullMQ are mandatory from day one. Use BullMQ for email, webhooks, push fanout, media processing, imports/exports, provider retries, and scheduled background work.
+Redis 8+ and BullMQ are mandatory from day one. Use BullMQ for email, webhooks, push fanout, media processing, imports/exports, provider retries, and scheduled background work.
 
 Rules:
 - Queue names and job names are constants.
@@ -386,7 +397,7 @@ Required endpoints:
 | `GET /docs` | Scalar docs | Dev/staging or auth-gated |
 | `GET /.well-known/jwks.json` | Public JWT verification keys | Public |
 
-`/health` must not check dependencies. `/ready` checks PostgreSQL, Redis, and mandatory storage. `/ready` returns `503` during graceful shutdown.
+`/health` must not check dependencies. `/ready` checks PostgreSQL 18+, Redis 8+, and mandatory storage. `/ready` returns `503` during graceful shutdown.
 
 Graceful shutdown order:
 1. Set `isShuttingDown = true`.
@@ -399,12 +410,14 @@ Graceful shutdown order:
 8. Ensure DB transactions finish, commit, or rollback.
 9. Close SQL pool, BullMQ, Redis, logs, and telemetry.
 
-Deployment uses Docker Compose behind Nginx on VPS. Baseline services are `nginx`, `api`, `worker`, `postgres`, `pgbouncer`, `redis`, `otel-collector`, `prometheus`, `loki`, `tempo`, `grafana`, and `certbot`.
+Deployment uses Docker Compose behind Nginx on VPS. Baseline services are `nginx`, `api`, `worker`, `postgres 18+`, `pgbouncer`, `redis 8+`, `otel-collector`, `prometheus`, `loki`, `tempo`, `grafana`, `certbot`, and `certbot-renew`.
 
 Dockerfile standard:
 - One Bun application image is used for both API and worker.
 - Use pinned `oven/bun:<version>`, never `latest`.
 - API uses the default command; worker uses `command: ["bun", "run", "worker"]`.
+- The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
+- Let's Encrypt issuance and renewal must be handled by Certbot sidecars with shared certificate volumes; do not install Certbot into the API or Nginx image.
 - Runtime containers run as non-root.
 - Never bake secrets into images.
 - Require `bun.lock` and `bun install --frozen-lockfile`.
@@ -417,12 +430,20 @@ Required backend checks:
 - Oxfmt formatting check: `oxfmt --check`.
 - Oxlint lint check: `oxlint`.
 - TypeScript typecheck: `tsc --noEmit`.
-- unit tests for services/utilities.
-- integration tests with PostgreSQL and Redis.
+- unit tests for services, utilities, schemas, and isolated domain logic under `tests/unit/`.
+- integration tests with PostgreSQL 18+, Redis 8+, queues, workers, and HTTP routes under `tests/integration/`.
+- E2E tests for critical user, webhook, and transactional flows under `tests/e2e/`.
 - OpenAPI generation/drift check.
 - Drizzle migration check.
 - Docker build plus API/worker command smoke tests.
 - auth/JWT/JWKS, CORS/CSRF where applicable, RBAC/scope, tenant isolation, tenant membership/role, tenant self-service admin RBAC, platform operator admin RBAC, subscription state transition, entitlement enforcement, soft lock allowed/blocked action, audit log, idempotency, rate limit, cache invalidation, timeout/body-size, media flow, webhook, queue retry/backoff/DLQ/manual replay, and worker retry/failure tests.
+
+Test placement rules:
+- `src/` contains production implementation code only.
+- Do not colocate tests with implementation files in `src/`.
+- Do not create adjacent `__tests__/` directories under `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Shared fixtures, factories, mocks, test containers, app harnesses, and custom assertions live under `tests/fixtures/`, `tests/factories/`, or `tests/helpers/`.
 
 ## Anti-Patterns
 
@@ -441,6 +462,8 @@ Required backend checks:
 | ESLint as the default backend linter | Oxlint |
 | Prettier or Biome as the default backend formatter | Oxfmt |
 | Treating Oxlint as TypeScript typecheck | `tsc --noEmit` |
+| Test files colocated with implementation code in `src/` | Dedicated top-level `tests/unit/`, `tests/integration/`, and `tests/e2e/` directories |
+| Adjacent `__tests__/` directories under `src/` | Top-level `tests/` hierarchy with mirrored domain subfolders |
 | Blob/base64 files in PostgreSQL | S3-compatible object storage + metadata/object keys |
 | Public-read buckets by default | Private bucket + presigned URLs |
 | Redis as durable source of truth | PostgreSQL source of truth, Redis cache/queue only |

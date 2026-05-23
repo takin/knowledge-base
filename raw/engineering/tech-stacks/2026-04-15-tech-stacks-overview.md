@@ -3,7 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
-Updated: 2026-05-22
+Updated: 2026-05-23
 Status: Draft
 Scope: Generic taxonomy, adoption model, registry, repository structure, anti-patterns, and open questions
 
@@ -32,9 +32,9 @@ Examples:
 |---|---|---|---|---|
 | Web: Astro Landing | Public marketing / SEO landing | Bun | Astro, MDX, Content Collections, Tailwind, Cloudflare Pages | `2026-05-22-web-astro-landing-stack.md` |
 | Web: React + Vite Dashboard | Authenticated SaaS dashboard / API-only SPA | Bun | React, Vite, TanStack Router/Query/Form/Table, Zustand, OpenAPI client, Docker Compose, Nginx static runtime, Let's Encrypt via Certbot sidecar | `2026-05-22-web-react-vite-dashboard-stack.md` |
-| Backend: Bun + Elysia | SaaS backend API / public API / mobile API / async workers | Bun | Elysia, OpenAPI, JWT/JWKS, RBAC, Drizzle, PostgreSQL, PgBouncer, Redis, BullMQ, S3-compatible storage, OpenTelemetry | `2026-04-15-backend-bun-elysia-stack.md` |
+| Backend: Bun + Elysia | SaaS backend API / public API / mobile API / async workers | Bun | Elysia, OpenAPI, JWT/JWKS, RBAC, Drizzle, PostgreSQL 18+, PgBouncer, Redis 8+, BullMQ, S3-compatible storage, OpenTelemetry | `2026-04-15-backend-bun-elysia-stack.md` |
 | Mobile: React Native + Expo | Mobile | Expo / JS | React Native, Expo Router, NativeWind, Maestro | `2026-04-15-mobile-react-native-expo-stack.md` |
-| Infrastructure: Docker Compose + Nginx | Infrastructure | Docker | Docker Compose, Nginx Brotli, PgBouncer, Vault, Kubernetes tier | `2026-04-15-infra-docker-compose-nginx-stack.md` |
+| Infrastructure: Docker Compose + Nginx | Infrastructure | Docker | Docker Compose, `fholzer/nginx-brotli`, Let's Encrypt Certbot sidecar, PgBouncer, Vault, Kubernetes tier | `2026-04-15-infra-docker-compose-nginx-stack.md` |
 | Security Baseline | Cross-stack | N/A | CSP, CSRF, XSS, SQL injection, rate limiting, dependency security | `2026-04-15-security-baseline.md` |
 | CI and Testing: TypeScript + React | Delivery | Bun / GitHub Actions | Oxlint, Oxfmt, TypeScript strict, Vitest, Playwright, React Doctor | `2026-04-15-ci-testing-typescript-react.md` |
 | Agent Skills | AI implementation workflow | N/A | Required coding-agent skills per stack | `2026-04-15-agent-skills.md` |
@@ -113,8 +113,12 @@ src/
     auth.ts        — principal, JWT claim, RBAC, and scope types
   utils/           — pure utility functions
 tests/
-  integration/     — API, service, and database integration tests
+  unit/            — services, pure utilities, schemas, and isolated domain logic
+  integration/     — API, service, worker, and database integration tests
   e2e/             — end-to-end or webhook flow tests
+  fixtures/        — reusable test data and static fixtures
+  factories/       — deterministic test data builders
+  helpers/         — test harnesses, dependency setup, and assertions
 Dockerfile
 docker-compose.yml
 .env.example
@@ -130,6 +134,14 @@ Rules:
 - BullMQ workers call the same `services/` layer as the HTTP controllers. Do not duplicate business logic inside workers.
 - OpenAPI tags, route metadata, and auth/security declarations are defined at the controller group level whenever possible.
 - Health endpoints (`/health`, `/ready`) are defined close to the app bootstrap in `src/index.ts` or a dedicated system controller, but must remain outside auth middleware.
+- `src/` contains production implementation code only; test files must not be colocated with real implementation code.
+- Do not use adjacent `__tests__/` directories inside `src/` and do not place `*.test.*` or `*.spec.*` files beside implementation files.
+- Unit, integration, and E2E tests live only under the top-level `tests/unit/`, `tests/integration/`, and `tests/e2e/` directories.
+- Shared test helpers, fixtures, factories, mocks, and harnesses live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`, not under `src/`.
+- PostgreSQL 18+ is the baseline relational database and Redis 8+ is the baseline cache/queue coordination service.
+- Primary keys are selected by workload, exposure, and relational fan-out: UUID v7 for normal API-facing entity tables, `BIGINT GENERATED ALWAYS AS IDENTITY` for high-ingestion/append-heavy/large fan-out tables.
+- UUID v7 primary keys use PostgreSQL 18+'s built-in `uuidv7()` as the database-side default; application code does not generate primary keys unless an ADR approves it.
+- High-ingestion tables that need public IDs use an internal BIGINT primary key plus `public_id UUID NOT NULL DEFAULT uuidv7() UNIQUE`.
 - Media blobs are never stored in PostgreSQL. Store media in S3-compatible object storage and save only metadata/object keys in the database.
 - API and worker processes must start OpenTelemetry and flush telemetry on shutdown.
 
@@ -182,11 +194,23 @@ src/
   utils/
     pagination.ts
 tests/
+  unit/
+    services/
+      webhook.service.test.ts
+    utils/
+      pagination.test.ts
   integration/
-    webhook.test.ts
-    workspace.test.ts
+    api/
+      webhook.test.ts
+      workspace.test.ts
+    workers/
+      webhook.worker.test.ts
   e2e/
-    webhook-flow.test.ts
+    flows/
+      webhook-flow.test.ts
+  fixtures/
+  factories/
+  helpers/
 ```
 
 In this structure:
@@ -243,12 +267,26 @@ src/
     pagination.ts
     cursor.ts
 tests/
+  unit/
+    services/
+      customer.service.test.ts
+      order.service.test.ts
+      product.service.test.ts
+    utils/
+      cursor.test.ts
   integration/
-    customer.test.ts
-    order.test.ts
-    product.test.ts
+    api/
+      customer.test.ts
+      order.test.ts
+      product.test.ts
+    db/
+      order-repository.test.ts
   e2e/
-    order-lifecycle.test.ts
+    flows/
+      order-lifecycle.test.ts
+  fixtures/
+  factories/
+  helpers/
 ```
 
 In this structure:
@@ -287,6 +325,9 @@ The following are explicitly prohibited in all products adopting this standard:
 | Ignoring dashboard bundle budgets | Performance regressions accumulate silently | Bundle analysis and CI budget checks |
 | Baking TLS certificates into Docker images | Cert rotation requires image rebuild and leaks secrets | Let's Encrypt volume + Certbot sidecar |
 | Installing Certbot into dashboard image | Bloats runtime and mixes TLS renewal with static serving | Certbot sidecar |
+| Installing Certbot into the main Nginx/API image | Mixes TLS lifecycle with runtime serving and causes rebuild-driven renewal | Certbot issuance/renewal sidecars with shared volumes |
+| Using stock `nginx` for the main gateway | Brotli is missing or inconsistently configured | `fholzer/nginx-brotli:<pinned-version>` |
+| Disabling Brotli by default | Larger payloads and inconsistent compression baseline | `NGINX_BROTLI_ENABLED=on` with gzip fallback |
 | Serving production dashboard app traffic over HTTP | Exposes sessions and user data to network interception | Port 80 ACME challenge + HTTPS redirect only |
 | Missing HTTPS redirect from port 80 to 443 | Users can remain on insecure HTTP | Always return 301 to HTTPS except ACME challenge path |
 | Manual-only certificate renewal | Certificates expire during normal operation | Cron/systemd renewal script |
@@ -307,6 +348,9 @@ The following are explicitly prohibited in all products adopting this standard:
 | Custom toast/snackbar implementation | Fragments transient feedback behavior and accessibility | Sonner via Shadcn |
 | Raw SQL strings in application code | Injection risk, loses type safety | Drizzle query builder |
 | Postgres driver other than `bun:sql` without reason | Adds unnecessary dependency | Default to Bun native driver |
+| Using UUID v4 for new primary keys | Random UUIDs fragment indexes and lose time-ordering | UUID v7 via PostgreSQL 18+ `uuidv7()` |
+| Using UUID primary keys for high-ingestion tables by default | Larger PK/FK indexes and higher write amplification | BIGINT identity PK plus optional UUID v7 `public_id` |
+| Using `serial` or `bigserial` for new primary keys | Legacy sequence shorthand, less explicit than SQL-standard identity | `BIGINT GENERATED ALWAYS AS IDENTITY` when BIGINT is chosen |
 | Node.js / npm / pnpm in any form | Stack inconsistency | BunJS |
 | `dangerouslySetInnerHTML` with unsanitized input | XSS vector | DOMPurify + CSP headers |
 | Wildcard credentialed CORS | Allows unintended origins to make authenticated requests | Explicit per-environment origin allowlist |
@@ -327,7 +371,7 @@ The following are explicitly prohibited in all products adopting this standard:
 | Missing `proxy_next_upstream` in Nginx | One 502 from a deregistering pod reaches the user | Always configure retry on 502/503/504 |
 | No load test during staged deploy | Zero-downtime not actually verified | Run `vegeta` at 100 RPS during every staged deploy |
 | `kubectl rollout restart` without PodDisruptionBudget | Multiple pods restart simultaneously → capacity drops | Set PDB `minAvailable: 2` alongside `maxUnavailable: 0` |
-| Connecting API or worker directly to Postgres (bypassing PgBouncer) | Exhausts Postgres connection limit under load | Route all DB traffic through PgBouncer |
+| Connecting API or worker directly to PostgreSQL 18+ (bypassing PgBouncer) | Exhausts Postgres connection limit under load | Route all DB traffic through PgBouncer |
 | Unbounded Drizzle connection pool | Multiple instances × unlimited = Postgres crash | Set `DB_POOL_MAX` per instance |
 | PgBouncer in session or statement mode | Negates pooling benefits at high concurrency | Use `transaction` mode only |
 | Returning raw Zod or Elysia errors to the client | Leaks internal schema, inconsistent DX | Use the standard error envelope (§20.2) |

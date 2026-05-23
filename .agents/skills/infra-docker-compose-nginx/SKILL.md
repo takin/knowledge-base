@@ -20,7 +20,7 @@ Related standards:
 
 Before implementing infrastructure changes, load and apply these skills when available:
 
-- `backend-bun-elysia` when infra touches API, worker, PostgreSQL, PgBouncer, Redis, BullMQ, OpenTelemetry, or backend Nginx routing.
+- `backend-bun-elysia` when infra touches API, worker, PostgreSQL 18+, PgBouncer, Redis 8+, BullMQ, OpenTelemetry, or backend Nginx routing.
 - `web-react-vite-dashboard` when infra touches authenticated dashboard static deployment, Nginx static serving, Certbot, or dashboard Docker images.
 - `web-astro-landing` only when comparing landing deployment concerns or coordinating with Cloudflare/static landing deployments.
 
@@ -38,6 +38,9 @@ If a skill or documentation source is unavailable, continue using the rules in t
 - Backend API deployment runs separate API and worker processes behind Nginx.
 - Deployment procedures must be deterministic and tested in staging.
 - Production deploys must prove the new target is healthy before removing the old target.
+- Main Nginx gateways use `fholzer/nginx-brotli:<pinned-version>` directly or through a minimal wrapper image.
+- Brotli is enabled by default with `NGINX_BROTLI_ENABLED=on`; gzip fallback is enabled with `NGINX_GZIP_ENABLED=on`.
+- Production Let's Encrypt issuance and renewal use Certbot sidecars with shared Docker volumes.
 
 ## Environment And Secrets
 
@@ -54,7 +57,7 @@ Rules:
 - Never bake secrets into Docker images through `ENV` or build-time `ARG`.
 - Vault OSS is the mandatory secrets manager for staging and production.
 - `.env.example` is committed and documents all required variables.
-- Staging and production `DATABASE_URL` points to PgBouncer, not directly to Postgres.
+- Staging and production `DATABASE_URL` points to PgBouncer, not directly to PostgreSQL 18+.
 - Baseline env categories include app config, database, JWT/JWKS, CORS, Redis/BullMQ, object storage, OpenTelemetry, and monitoring.
 
 ## Backend API Runtime Profile
@@ -65,15 +68,16 @@ Required baseline services:
 - `nginx`
 - `api`
 - `worker`
-- `postgres`
+- `postgres 18+`
 - `pgbouncer`
-- `redis`
+- `redis 8+`
 - `otel-collector`
 - `prometheus`
 - `loki`
 - `tempo`
 - `grafana`
 - `certbot`
+- `certbot-renew`
 
 Optional services:
 - `minio`
@@ -104,15 +108,39 @@ services:
       - ALL
 
   nginx:
+    build:
+      context: ./nginx
     image: example-api-nginx:${TAG}
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
     environment:
       NGINX_UPSTREAM_HOST: api
       NGINX_UPSTREAM_PORT: 3000
+      NGINX_SERVER_NAME: api.example.com
+      NGINX_BROTLI_ENABLED: "on"
+      NGINX_GZIP_ENABLED: "on"
     depends_on:
       - api
+
+  certbot:
+    image: certbot/certbot:<pinned-version>
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+
+  certbot-renew:
+    image: certbot/certbot:<pinned-version>
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+
+volumes:
+  letsencrypt:
+  certbot-webroot:
 ```
 
 Rules:
@@ -120,9 +148,12 @@ Rules:
 - `api` handles HTTP traffic only.
 - `worker` processes BullMQ jobs only.
 - Do not run BullMQ workers inside the API process in production.
-- `api` and `worker` both connect to PgBouncer, Redis, object storage, and OpenTelemetry Collector.
-- Redis is mandatory for BullMQ, rate limiting, permission cache, and short-lived coordination.
-- PgBouncer runs in transaction mode.
+- `api` and `worker` both connect to PgBouncer, Redis 8+, object storage, and OpenTelemetry Collector.
+- PostgreSQL 18+ is the baseline durable database service.
+- Redis 8+ is mandatory for BullMQ, rate limiting, permission cache, and short-lived coordination.
+- PgBouncer runs in transaction mode and connects to PostgreSQL 18+.
+- The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
+- Certbot sidecars own Let's Encrypt issuance and renewal; do not install Certbot into Nginx or API images.
 - `api` `stop_grace_period` is at least `30s`.
 - `worker` `stop_grace_period` is at least `60s`.
 - Production media storage should prefer managed S3-compatible storage.
@@ -147,7 +178,8 @@ Key rules:
 - `NGINX_CLIENT_MAX_BODY_SIZE` defaults to `1m`.
 - Media uses presigned object-storage uploads.
 - Set upstream timeouts such as `proxy_connect_timeout 5s`, `proxy_send_timeout 30s`, and `proxy_read_timeout 30s`.
-- Nginx runtime variables include `NGINX_UPSTREAM_HOST=api`, `NGINX_UPSTREAM_PORT=3000`, Brotli/Gzip toggles, worker/connection limits, body size, rate limit RPS, and TLS/HSTS switch.
+- Nginx runtime variables include `NGINX_SERVER_NAME`, `NGINX_UPSTREAM_HOST=api`, `NGINX_UPSTREAM_PORT=3000`, Brotli/Gzip toggles, worker/connection limits, body size, rate limit RPS, and TLS/HSTS switch.
+- Port `80` must serve `/.well-known/acme-challenge/` from the shared Certbot webroot for ACME HTTP-01 validation.
 
 ## Static SPA Dashboard Profile
 
@@ -158,7 +190,7 @@ Dashboard invariants:
 - Nginx serves Vite `dist/` directly from `/usr/share/nginx/html`.
 - No Bun, Node, Vite preview, custom static server, or internal dashboard app server runs in production runtime.
 - TLS terminates at Nginx with Let's Encrypt certificates in Docker volumes.
-- Certbot or equivalent renewal sidecar handles issuance and renewal.
+- Certbot sidecars handle issuance and renewal.
 - Static hashed assets use immutable cache headers.
 - `index.html` uses no-cache or must-revalidate.
 
@@ -201,15 +233,15 @@ Worker shutdown sequence:
 | Tier | Concurrency | Orchestration | Notes |
 | --- | ---: | --- | --- |
 | Tier 0 | 100 | Single VM Docker Compose | MVP/prototype, co-located services |
-| Tier 1 | 2K | Docker Compose | Nginx, API, worker, PgBouncer, PostgreSQL, Redis, Grafana stack |
+| Tier 1 | 2K | Docker Compose | Nginx, API, worker, PgBouncer, PostgreSQL 18+, Redis 8+, Grafana stack |
 | Tier 2 | 10K | Docker Compose or light K8s | More API instances, workers, DB read replicas, observability stack |
-| Tier 3 | 100K | Kubernetes | API HPA, worker HPA, PDB, Redis Cluster, read replicas, OS tuning, observability stack |
+| Tier 3 | 100K | Kubernetes | API HPA, worker HPA, PDB, Redis 8+ Cluster, read replicas, OS tuning, observability stack |
 
 Tier 3 requirements:
 - API Deployment with `maxUnavailable: 0`, `minReadySeconds`, readiness/liveness probes, `preStop` sleep, and sufficient `terminationGracePeriodSeconds`.
 - Worker Deployment using the same image and `command: ["bun", "run", "worker"]`.
 - API and worker HPAs/PDBs sized independently.
-- Redis Cluster for 100K+ concurrency.
+- Redis 8+ Cluster for 100K+ concurrency.
 - OS file descriptor tuning on every host running API containers.
 - Tier 3 architecture routes API traffic to Redis/BullMQ, and workers consume from Redis/BullMQ.
 - API pods do not call worker pods directly.
@@ -245,14 +277,16 @@ When reviewing or changing infra, verify the relevant items:
 - BullMQ workers are not running inside the API process.
 - PgBouncer is present and staging/production `DATABASE_URL` values target it.
 - PgBouncer is in transaction mode.
-- Redis is present for BullMQ, rate limiting, permission cache, and coordination.
+- PostgreSQL 18+ is used for durable database services.
+- Redis 8+ is present for BullMQ, rate limiting, permission cache, and coordination.
 - Object storage is configured when media is used.
+- Nginx uses `fholzer/nginx-brotli:<pinned-version>` and Brotli is on by default.
 - Self-hosted MinIO has backup and restore procedures.
 - Nginx blocks public `/ready`, `/metrics`, `/docs`, and `/docs/json` unless auth-gated by project decision.
 - `/health` is safe for public load-balancer checks.
 - Nginx API body-size and upstream timeouts match the standard.
 - TLS certificates live in volumes, not image layers.
-- Certbot or equivalent renewal is automated and reloads Nginx after success.
+- Certbot issuance and renewal sidecars use shared volumes and renewal reloads Nginx after success.
 - Deployment script proves the new target is healthy before removing the old target.
 - API and worker graceful shutdown paths are configured and tested.
 - Observability services exist where required.
@@ -267,6 +301,8 @@ Do not introduce these patterns:
 - Exposing API container ports to the host.
 - Running BullMQ workers inside the API process in production.
 - Using Redis as durable source of truth.
+- Using stock `nginx`, `nginx:latest`, `fholzer/nginx-brotli:latest`, or disabling Brotli by default.
+- Installing Certbot into the API or Nginx image.
 - Baking secrets into images with `ENV` or build-time `ARG`.
 - Using `.env` as staging or production secrets management.
 - Direct `docker compose restart` as a production deploy procedure.
@@ -290,7 +326,7 @@ When modifying or creating infrastructure:
 2. Load the relevant stack skill before editing application-adjacent infra.
 3. Keep host-facing exposure minimal; Nginx is the default public HTTP boundary.
 4. Keep API and worker runtime responsibilities separate.
-5. Route staging and production database traffic through PgBouncer.
+5. Route staging and production database traffic through PgBouncer to PostgreSQL 18+.
 6. Keep staging and production secrets in Vault or approved secret injection, not `.env` files or images.
 7. Prefer deterministic deploy scripts over ad hoc Compose commands.
 8. Ensure the new deployment target is checked directly before removing the old target.

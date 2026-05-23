@@ -111,6 +111,12 @@ src/
 public/
   images/
   robots.txt
+tests/
+  unit/
+  integration/
+  e2e/
+  fixtures/
+  helpers/
 astro.config.mjs
 ```
 
@@ -121,6 +127,9 @@ Rules:
 - Interactive React components live in `src/components/islands/**`.
 - SEO helpers live in `src/components/seo/**` or `src/lib/seo.ts`.
 - Site constants live in `src/lib/site.ts`.
+- `src/` contains implementation and content wiring only; tests do not live beside source files.
+- Unit tests live under `tests/unit/`, integration/smoke tests under `tests/integration/`, and browser E2E flows under `tests/e2e/`.
+- Shared test helpers and fixtures live under `tests/helpers/` or `tests/fixtures/`.
 - Do not place dashboard, admin, or authenticated product-app routes in the landing repo.
 
 ## MDX Content Model
@@ -245,6 +254,12 @@ Required checks:
 - `bun run test`.
 - `bun run build`.
 
+Test placement rules:
+- Do not colocate test files with Astro pages, layouts, components, islands, or lib helpers.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- All tests live under the top-level `tests/` hierarchy.
+
 Recommended checks:
 - Link checking for public pages.
 - Accessibility checks for marketing and blog templates.
@@ -271,6 +286,7 @@ Do not introduce these patterns:
 - Fullstack SSR framework by default.
 - React islands for static hero sections, testimonials, feature cards, FAQ content, blog body, or full-page shells.
 - Secrets, API keys, DSNs, tokens, or private endpoints in source code.
+- Colocated tests or adjacent `__tests__/` directories inside `src/`.
 
 ## Implementation Workflow
 

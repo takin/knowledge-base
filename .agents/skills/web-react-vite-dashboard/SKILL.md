@@ -139,6 +139,19 @@ public/
 nginx/
   nginx.conf.template
   entrypoint.sh
+tests/
+  unit/
+    components/
+    stores/
+    utils/
+  integration/
+    forms/
+    api-client/
+    routing/
+  e2e/
+  fixtures/
+  factories/
+  helpers/
 infra/
   scripts/
     renew-certs.sh
@@ -154,6 +167,9 @@ Rules:
 - Page components live under `src/pages/**`.
 - Feature reusable code lives in `src/features/<domain>/`.
 - Generated API code lives only under `src/lib/api/generated/**`.
+- `src/` contains dashboard implementation code only; tests do not live beside implementation files.
+- Unit/component tests live under `tests/unit/`, integration tests under `tests/integration/`, and Playwright tests under `tests/e2e/`.
+- Shared test render helpers, MSW handlers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
 - `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `nginx/nginx.conf.template`, `nginx/entrypoint.sh`, and `infra/scripts/renew-certs.sh` are required for production dashboard projects.
 - Do not add `nginx/Dockerfile`; use the approved Nginx runtime image directly.
 
@@ -312,6 +328,12 @@ services:
       - letsencrypt:/etc/letsencrypt
       - certbot-webroot:/var/www/certbot
 
+  certbot-renew:
+    image: certbot/certbot:<pinned-version>
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+
 volumes:
   letsencrypt:
   certbot-webroot:
@@ -321,7 +343,7 @@ TLS rules:
 - Port `80` serves only ACME HTTP-01 challenge files and redirects all other traffic to HTTPS.
 - Port `443` terminates TLS with Let's Encrypt certificates and serves static files.
 - Certificates live in Docker volumes, never image layers.
-- Certbot sidecar owns issuance and renewal.
+- Certbot sidecars own issuance and renewal.
 - `infra/scripts/renew-certs.sh` runs renewal through cron/systemd or an approved scheduler and reloads Nginx after success.
 - Certificate expiry monitoring is required.
 
@@ -362,6 +384,16 @@ Required checks:
 - `bun run build` with React Compiler enabled.
 - Docker build and static artifact scan.
 
+Test placement rules:
+- `src/` contains dashboard implementation code only.
+- Do not colocate test files with components, routes, stores, hooks, utilities, or generated clients.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Unit and component tests live under `tests/unit/`.
+- Integration tests for forms, stores, routing behavior, and API-client wiring live under `tests/integration/`.
+- Playwright E2E tests live under `tests/e2e/`.
+- Shared test render helpers, MSW handlers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+
 Required E2E coverage before production:
 - Login/logout or session handoff.
 - Primary dashboard happy path.
@@ -386,6 +418,7 @@ Do not introduce these patterns:
 - Plain `shadcn init`.
 - Importing charts, editors, upload clients, analytics, chat, session replay, or marketing widgets into the app shell.
 - Public source maps.
+- Colocated tests or adjacent `__tests__/` directories inside `src/`.
 - Running `vite preview` in production.
 - Proxying to a dashboard app server.
 - Missing SPA fallback such as `try_files $uri $uri/ /index.html`.

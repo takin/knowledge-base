@@ -3,6 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-04-15
 Published: 2026-04-15
+Updated: 2026-05-23
 Status: Draft
 Scope: TypeScript, React, CI, testing, linting, type checking, and release quality gates
 
@@ -40,7 +41,14 @@ Scope: TypeScript, React, CI, testing, linting, type checking, and release quali
 Rules:
 - Every backend controller/service that touches PostgreSQL, Redis, queues, auth, or storage must have integration coverage against real test dependencies where feasible — no mocks for database calls in backend integration tests.
 - E2E tests cover: login/logout, the single most important user action per product, and any flow that handles money or data loss.
-- Test files live in `__tests__/` adjacent to the code they test, or in a top-level `tests/` folder for E2E.
+- Test files live under the top-level `tests/` directory, never adjacent to production implementation files.
+- Unit tests live in `tests/unit/`.
+- Integration tests live in `tests/integration/`.
+- E2E tests live in `tests/e2e/`.
+- Shared test helpers, fixtures, factories, and mocks live in `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Vitest and Playwright config must target the top-level test directories instead of scanning colocated tests in `src/`.
 
 ### 15.4 React Doctor
 

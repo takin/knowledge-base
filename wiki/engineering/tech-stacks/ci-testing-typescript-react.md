@@ -1,8 +1,8 @@
 # CI and Testing Stack: TypeScript + React
 
-Updated: 2026-05-22
+Updated: 2026-05-24
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
 Platform: Delivery / quality
 Runtime: Bun
 Framework: TypeScript + React
@@ -38,6 +38,16 @@ This stack defines quality gates for TypeScript React products. New dashboard pr
 | End-to-end | Playwright | Auth, onboarding, core feature happy path, destructive/payment flows |
 | React health scan | React Doctor | React correctness, performance, security, and architecture diagnostics |
 | Bundle analysis | Project-approved Vite bundle analyzer or size-limit check | Initial app shell, route chunks, dependency growth |
+
+Test placement rules:
+- Test files live under the top-level `tests/` directory, never adjacent to production implementation files.
+- Unit tests live in `tests/unit/`.
+- Integration tests live in `tests/integration/`.
+- E2E tests live in `tests/e2e/`.
+- Shared test helpers, fixtures, factories, and mocks live in `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Vitest and Playwright config must target the top-level test directories instead of scanning colocated tests in `src/`.
 
 ## React Doctor
 

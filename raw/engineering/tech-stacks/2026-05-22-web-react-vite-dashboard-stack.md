@@ -3,7 +3,7 @@
 Source URL: Internal draft
 Collected: 2026-05-22
 Published: 2026-05-22
-Updated: 2026-05-22
+Updated: 2026-05-23
 Status: Draft
 Scope: Authenticated SaaS dashboards, API-only frontend apps, no-SEO React SPAs, and self-hosted static deployment
 
@@ -901,6 +901,37 @@ Required CI checks:
 - React Doctor or equivalent React health scan when available.
 - Bundle budget or bundle analysis check before production launch.
 - `bun run build`.
+
+Test placement rules:
+- `src/` contains dashboard implementation code only.
+- Do not colocate test files with components, routes, stores, hooks, utilities, or generated clients.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Unit and component tests live under `tests/unit/`.
+- Integration tests for forms, stores, routing behavior, and API-client wiring live under `tests/integration/`.
+- Playwright E2E tests live under `tests/e2e/`.
+- Shared test render helpers, MSW handlers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+
+Dashboard test directory shape:
+
+```text
+tests/
+  unit/
+    components/
+    stores/
+    utils/
+  integration/
+    forms/
+    api-client/
+    routing/
+  e2e/
+    auth.spec.ts
+    onboarding.spec.ts
+    core-flow.spec.ts
+  fixtures/
+  factories/
+  helpers/
+```
 
 Required E2E coverage before production:
 - Login/logout or session handoff.

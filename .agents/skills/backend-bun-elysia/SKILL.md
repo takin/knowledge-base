@@ -5,7 +5,7 @@ description: "Use when building, reviewing, or modifying standalone Backend API 
 
 # Backend API: Bun + Elysia
 
-This skill applies the repository wiki standard for standalone backend APIs. Use it before writing or reviewing code for Bun services, Elysia HTTP routes, OpenAPI contracts, auth, PostgreSQL/Drizzle, Redis, BullMQ workers, webhooks, media flows, observability, and Docker Compose API deployments.
+This skill applies the repository wiki standard for standalone backend APIs. Use it before writing or reviewing code for Bun services, Elysia HTTP routes, OpenAPI contracts, auth, PostgreSQL 18+/Drizzle, Redis 8+, BullMQ workers, webhooks, media flows, observability, and Docker Compose API deployments.
 
 Primary source of truth: `wiki/engineering/tech-stacks/backend-bun-elysia.md`.
 
@@ -132,12 +132,19 @@ CSRF rules:
 
 - Elysia/TypeBox handles HTTP boundary validation.
 - Zod may handle business or domain validation inside services.
-- PostgreSQL is mandatory.
+- PostgreSQL 18+ is mandatory.
 - Drizzle is the mandatory ORM/query builder.
 - Use PgBouncer in transaction mode for staging and production.
 - API and worker `DATABASE_URL` values point to PgBouncer, not directly to Postgres.
 - Drizzle/Bun SQL pools are bounded per API or worker instance.
 - Raw SQL strings are banned unless using Drizzle's parameterized `sql` helper with a documented reason.
+- Project override: choose primary keys by workload, exposure, and relational fan-out. This overrides generic PostgreSQL table-design guidance when it conflicts.
+- Default to UUID v7 for entity tables that are not write-hot, especially when IDs are exposed through APIs, URLs, webhooks, exports, or cross-system integrations.
+- Use `BIGINT GENERATED ALWAYS AS IDENTITY` for high-ingestion, append-heavy, transaction-heavy, or large fan-out tables where storage, index size, FK cost, and insert locality matter.
+- UUID v7 keys use PostgreSQL 18+'s built-in `uuidv7()` as the database-side default.
+- Application code must not generate primary keys by default unless an ADR approves it.
+- Do not use `serial`, `bigserial`, or UUID v4 for new primary keys unless an ADR documents the reason.
+- High-ingestion tables that need public IDs use an internal BIGINT primary key plus `public_id UUID NOT NULL DEFAULT uuidv7() UNIQUE`.
 - Every schema change is a committed Drizzle migration.
 - Do not edit migrations after they have been applied to staging or production.
 - Destructive migrations require backup, rollback plan, and approval.
@@ -182,7 +189,7 @@ CSRF rules:
 
 ## Redis, BullMQ, And Workers
 
-- Redis and BullMQ are mandatory from day one.
+- Redis 8+ and BullMQ are mandatory from day one.
 - Use BullMQ for email, webhooks, push fanout, media processing, imports/exports, provider retries, and scheduled background work.
 - Queue names and job names are constants.
 - Job payloads are schema-validated before enqueue and execution.
@@ -256,13 +263,15 @@ Required endpoints:
 
 Rules:
 - `/health` must not check dependencies.
-- `/ready` checks PostgreSQL, Redis, and mandatory storage.
+- `/ready` checks PostgreSQL 18+, Redis 8+, and mandatory storage.
 - `/ready` returns `503` during graceful shutdown.
 - Deployment uses Docker Compose behind Nginx on VPS by default.
-- Baseline services are `nginx`, `api`, `worker`, `postgres`, `pgbouncer`, `redis`, `otel-collector`, `prometheus`, `loki`, `tempo`, `grafana`, and `certbot`.
+- Baseline services are `nginx`, `api`, `worker`, `postgres 18+`, `pgbouncer`, `redis 8+`, `otel-collector`, `prometheus`, `loki`, `tempo`, `grafana`, `certbot`, and `certbot-renew`.
 - One Bun application image is used for both API and worker.
 - API uses the default command; worker uses `command: ["bun", "run", "worker"]`.
 - Use pinned `oven/bun:<version>`, never `latest`.
+- The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
+- Let's Encrypt issuance and renewal use Certbot sidecars with shared certificate volumes; do not install Certbot into the API or Nginx image.
 - Runtime containers run as non-root.
 - Never bake secrets into images.
 - Require `bun.lock` and `bun install --frozen-lockfile`.
@@ -296,8 +305,9 @@ Required checks for backend API repositories:
 - Formatting check.
 - Lint check.
 - TypeScript typecheck.
-- Unit tests for services and utilities.
-- Integration tests with PostgreSQL and Redis.
+- Unit tests for services, utilities, schemas, and isolated domain logic live under `tests/unit/`.
+- Integration tests with PostgreSQL 18+, Redis 8+, queues, workers, and HTTP routes live under `tests/integration/`.
+- E2E tests for critical user, webhook, and transactional flows live under `tests/e2e/`.
 - OpenAPI generation and drift check.
 - Drizzle migration check.
 - Docker build.
@@ -314,6 +324,13 @@ Required checks for backend API repositories:
 - Webhook signature and idempotency tests.
 - Queue retry/backoff/DLQ/manual replay tests.
 - Worker retry and failure tests.
+
+Test placement rules:
+- `src/` contains production implementation code only.
+- Do not colocate tests with implementation files in `src/`.
+- Do not create adjacent `__tests__/` directories under `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Shared fixtures, factories, mocks, test containers, app harnesses, and custom assertions live under `tests/fixtures/`, `tests/factories/`, or `tests/helpers/`.
 
 ## Anti-Patterns
 
@@ -333,6 +350,7 @@ Do not introduce these patterns:
 - Exposing API container ports to the host.
 - Workers inside the API process in production.
 - `oven/bun:latest`.
+- Colocated tests or adjacent `__tests__/` directories inside `src/`.
 - Infinite retries or unbounded backoff.
 
 ## Implementation Workflow

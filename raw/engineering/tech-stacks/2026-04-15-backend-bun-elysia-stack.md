@@ -37,7 +37,7 @@ Rules:
 - A single backend project is initialized as either internal or public, not both by default.
 - Both profiles expose REST JSON APIs under `/api/v1`.
 - Both profiles generate OpenAPI 3.1 specs.
-- Both profiles use JWT, JWKS, RBAC, scopes, Redis, BullMQ, PostgreSQL, Drizzle, Pino, OpenTelemetry, and Docker Compose.
+- Both profiles use JWT, JWKS, RBAC, scopes, Redis 8+, BullMQ, PostgreSQL 18+, Drizzle, Pino, OpenTelemetry, and Docker Compose.
 - Public API projects must treat the API contract as long-lived and externally consumed.
 
 ### 20.3 Architecture Overview
@@ -47,8 +47,8 @@ flowchart LR
     Client[Dashboard / Mobile / M2M / Public Client] --> Nginx[Nginx TLS Gateway]
     Nginx --> API[Elysia API]
     API --> PgBouncer[PgBouncer]
-    PgBouncer --> Postgres[(PostgreSQL)]
-    API --> Redis[(Redis)]
+    PgBouncer --> Postgres[(PostgreSQL 18+)]
+    API --> Redis[(Redis 8+)]
     API --> Queue[BullMQ Queues]
     Queue --> Worker[BullMQ Worker]
     Worker --> PgBouncer
@@ -64,7 +64,7 @@ Rules:
 - Nginx is the only host-facing service in staging and production.
 - The API container exposes its port only inside the Docker network.
 - Workers are separate runtime processes from the API server.
-- Redis and BullMQ are mandatory from day one.
+- Redis 8+ and BullMQ are mandatory from day one.
 - Object storage is mandatory for media-capable products; never store file blobs in PostgreSQL.
 
 ### 20.4 Toolchain: Oxc, Oxlint, And Oxfmt
@@ -624,9 +624,9 @@ Rules:
 - Frontend validation is UX only; backend validation is authoritative.
 - Validation errors are mapped into the standard error envelope.
 
-### 20.12 Database: PostgreSQL + Drizzle + PgBouncer
+### 20.12 Database: PostgreSQL 18+ + Drizzle + PgBouncer
 
-PostgreSQL is the mandatory relational database. Drizzle is the mandatory ORM/query builder.
+PostgreSQL 18+ is the mandatory relational database. Drizzle is the mandatory ORM/query builder.
 
 Rules:
 - Use Drizzle schema and migrations.
@@ -638,6 +638,20 @@ Rules:
 - Tenant-owned tables include `workspace_id`.
 - Unique constraints include `workspace_id` when uniqueness is tenant-scoped.
 - Add indexes for foreign keys, tenant filters, cursor pagination, lookup columns, and high-traffic filters.
+
+Primary key strategy:
+- Choose primary keys by workload, exposure, and relational fan-out.
+- Default to UUID v7 for entity tables that are not write-hot, especially when IDs are exposed through APIs, URLs, webhooks, exports, or cross-system integrations.
+- Use `BIGINT GENERATED ALWAYS AS IDENTITY` for high-ingestion, append-heavy, transaction-heavy, or large fan-out tables where storage, index size, FK cost, and insert locality matter.
+- UUID v7 keys must use PostgreSQL 18+'s built-in `uuidv7()` as the database-side default.
+- Application code must not generate primary keys by default unless an ADR approves it.
+- Do not use `serial` or `bigserial`; use SQL-standard identity columns for BIGINT keys.
+- Do not use UUID v4 for new primary keys unless an ADR documents the reason.
+- For high-ingestion tables that need public IDs, use an internal BIGINT primary key plus `public_id UUID NOT NULL DEFAULT uuidv7() UNIQUE`.
+
+Default UUID v7 candidates include users, workspaces, organizations, roles, API clients, products, customers, configuration tables, and reference/master data that is not write-hot.
+
+Default BIGINT identity candidates include orders, order items, order events, ledger entries, audit logs, webhook events, outbox messages, notification deliveries, job runs, metrics events, and append-only/high-volume logs.
 
 Example DB client:
 
@@ -914,7 +928,7 @@ Rules:
 
 ### 20.16 Redis And BullMQ
 
-Redis and BullMQ are mandatory from day one.
+Redis 8+ and BullMQ are mandatory from day one.
 
 Use BullMQ for:
 - email sending
@@ -957,7 +971,7 @@ flowchart TD
 
 #### 20.16.1 Caching Strategy
 
-Redis caching is an optimization layer. PostgreSQL remains the source of truth for durable business data.
+Redis 8+ caching is an optimization layer. PostgreSQL 18+ remains the source of truth for durable business data.
 
 Cacheable data:
 - permission resolution results with short TTL and explicit invalidation
@@ -1659,8 +1673,9 @@ Required backend checks:
 - Oxfmt formatting check: `oxfmt --check`
 - Oxlint lint check: `oxlint`
 - TypeScript typecheck: `tsc --noEmit`
-- unit tests for services and pure utilities
-- integration tests with PostgreSQL and Redis
+- unit tests for services, pure utilities, schemas, and isolated domain logic under `tests/unit/`
+- integration tests with PostgreSQL 18+, Redis 8+, queues, workers, and HTTP routes under `tests/integration/`
+- E2E tests for critical user, webhook, and transactional flows under `tests/e2e/`
 - OpenAPI generation/drift check
 - Drizzle migration check
 - Docker build
@@ -1686,6 +1701,16 @@ Required backend checks:
 - worker retry/failure tests
 - queue retry, backoff, DLQ, and manual replay tests
 
+Test placement rules:
+- `src/` contains production implementation code only.
+- Test files must not be colocated with real implementation code.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Unit tests live in `tests/unit/`.
+- Integration tests live in `tests/integration/`.
+- E2E tests live in `tests/e2e/`.
+- Shared fixtures, factories, mocks, test containers, app harnesses, and custom assertions live under `tests/fixtures/`, `tests/factories/`, or `tests/helpers/`.
+
 ### 20.26 Deployment: Docker Compose + Nginx On VPS
 
 Backend production deployments use Docker Compose on VPS behind Nginx.
@@ -1696,15 +1721,16 @@ Baseline services:
 nginx
 api
 worker
-postgres
+postgres 18+
 pgbouncer
-redis
+redis 8+
 otel-collector
 prometheus
 loki
 tempo
 grafana
 certbot
+certbot-renew
 ```
 
 Optional project services:
@@ -1723,8 +1749,8 @@ flowchart TB
     Nginx --> API[api container :3000]
 
     API --> PgBouncer[pgbouncer]
-    PgBouncer --> Postgres[(postgres)]
-    API --> Redis[(redis)]
+    PgBouncer --> Postgres[(postgres 18+)]
+    API --> Redis[(redis 8+)]
     API --> Storage[S3-compatible storage]
 
     Worker[worker container] --> PgBouncer
@@ -1740,7 +1766,8 @@ flowchart TB
     Loki --> Grafana
     Tempo --> Grafana
 
-    Certbot[certbot] --> Nginx
+    Certbot[certbot issuance sidecar] --> Nginx
+    CertbotRenew[certbot renewal sidecar] --> Nginx
 ```
 
 #### 20.26.1 Dockerfile Standard
@@ -1756,6 +1783,8 @@ Rules:
 - Runtime containers run as a non-root user.
 - The application image exposes only the internal API port, usually `3000`.
 - The application image must not publish host ports; host binding belongs to Nginx only.
+- The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
+- Let's Encrypt issuance and renewal must be handled by Certbot sidecars with shared certificate volumes; do not install Certbot into the API or Nginx image.
 - Do not bake secrets into Docker images through `ARG`, `ENV`, copied `.env` files, generated config, or build logs.
 - Do not copy `.git`, local caches, test reports, coverage, Playwright artifacts, `.env*`, or source maps into production images unless explicitly approved.
 - Require `bun.lock` and install with `bun install --frozen-lockfile`.
@@ -1936,8 +1965,20 @@ src/
     pagination.ts
     cursor.ts
 tests/
+  unit/
+    services/
+    utils/
+    schemas/
   integration/
+    api/
+    db/
+    workers/
+    webhooks/
   e2e/
+    flows/
+  fixtures/
+  factories/
+  helpers/
 Dockerfile
 docker-compose.yml
 .env.example
@@ -1949,6 +1990,9 @@ Rules:
 - Workers call services and never duplicate controller logic.
 - `lib/` owns cross-cutting infrastructure and reusable adapters.
 - Generated OpenAPI client code does not live in the backend repo unless a project explicitly generates SDK artifacts.
+- `tests/` owns all unit, integration, E2E, fixture, factory, and test helper code.
+- Do not colocate tests with implementation files in `src/`.
+- Do not create adjacent `__tests__/` directories under `src/`.
 
 ### 20.30 Anti-Patterns
 
@@ -1970,6 +2014,8 @@ The following are banned:
 | ESLint as the default backend linter | Oxlint |
 | Prettier or Biome as the default backend formatter | Oxfmt |
 | Treating Oxlint as TypeScript typecheck | `tsc --noEmit` |
+| Test files colocated with implementation code in `src/` | Dedicated top-level `tests/unit/`, `tests/integration/`, and `tests/e2e/` directories |
+| Adjacent `__tests__/` directories under `src/` | Top-level `tests/` hierarchy with mirrored domain subfolders |
 | Storing blob files or base64 in PostgreSQL | S3-compatible object storage + DB metadata/object keys |
 | Public-read storage buckets by default | Private bucket + presigned URLs |
 | Processing uploads synchronously in HTTP request | BullMQ worker processing |

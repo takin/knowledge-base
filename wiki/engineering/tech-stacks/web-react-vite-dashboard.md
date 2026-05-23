@@ -2,7 +2,7 @@
 
 Updated: 2026-05-23
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-22); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-22)
+Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23)
 Platform: Web / authenticated SaaS dashboard
 Runtime: Bun
 Framework: React + Vite SPA
@@ -124,6 +124,19 @@ public/
 nginx/
   nginx.conf.template
   entrypoint.sh
+tests/
+  unit/
+    components/
+    stores/
+    utils/
+  integration/
+    forms/
+    api-client/
+    routing/
+  e2e/
+  fixtures/
+  factories/
+  helpers/
 infra/
   scripts/
     renew-certs.sh
@@ -139,6 +152,9 @@ Rules:
 - Page components live under `src/pages/**`.
 - Feature reusable code lives in `src/features/<domain>/`.
 - Generated API code lives only under `src/lib/api/generated/**`.
+- `src/` contains dashboard implementation code only; tests do not live beside implementation files.
+- Unit/component tests live under `tests/unit/`, integration tests under `tests/integration/`, and Playwright tests under `tests/e2e/`.
+- Shared test render helpers, MSW handlers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
 - `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `nginx/nginx.conf.template`, `nginx/entrypoint.sh`, and `infra/scripts/renew-certs.sh` are required.
 - Do not add `nginx/Dockerfile` for dashboard projects; use the approved Nginx runtime image directly.
 
@@ -344,6 +360,16 @@ Required checks:
 - `bun run build` with React Compiler enabled.
 - Docker build and static artifact scan.
 
+Test placement rules:
+- `src/` contains dashboard implementation code only.
+- Do not colocate test files with components, routes, stores, hooks, utilities, or generated clients.
+- Do not use adjacent `__tests__/` directories inside `src/`.
+- Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
+- Unit and component tests live under `tests/unit/`.
+- Integration tests for forms, stores, routing behavior, and API-client wiring live under `tests/integration/`.
+- Playwright E2E tests live under `tests/e2e/`.
+- Shared test render helpers, MSW handlers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+
 Required E2E coverage before production:
 - Login/logout or session handoff.
 - Primary dashboard happy path.
@@ -368,6 +394,7 @@ Required E2E coverage before production:
 | Plain `shadcn init` | Loses custom theme baseline | Ask for preset, fallback to `b6Z8CJysK` |
 | Importing charts/editors/upload clients in app shell | Bloats initial JS | Code splitting |
 | Public source maps | Exposes source code | Private upload only |
+| Colocated tests or adjacent `__tests__/` directories inside `src/` | Mixes implementation and test concerns | Top-level `tests/` hierarchy |
 | Running `vite preview` in production | Not production-grade | Nginx static runtime |
 | Proxying to a dashboard app server | Unnecessary runtime hop | Nginx serves `dist/` directly |
 | Missing SPA fallback | Deep links 404 | `try_files $uri $uri/ /index.html` |
