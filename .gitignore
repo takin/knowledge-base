@@ -24,5 +24,8 @@ htmlcov/
 # Node dependencies for repo-local OpenCode plugins
 .opencode/node_modules/
 
+#Agent skills
+.agents/
+
 # Env Vars
 *.env*
