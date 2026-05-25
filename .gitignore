@@ -29,3 +29,6 @@ htmlcov/
 
 # Env Vars
 *.env*
+
+# Graphify
+graphify-out/
