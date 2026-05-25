@@ -1,9 +1,9 @@
 # Tech Stacks Index
 
-Updated: 2026-05-23
+Updated: 2026-05-25
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
-Raw: [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md); [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25)
+Raw: [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md); [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
 
 Generic, reusable engineering standards for application stacks. Stack names encode platform plus runtime or framework identity so current standards can coexist with future alternatives.
 

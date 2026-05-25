@@ -102,3 +102,8 @@
 ## [2026-05-25] maintenance | Backend Drizzle Schema Organization
 - Updated: Backend Stack: Bun + Elysia.
 - Updated: Backend API: Bun + Elysia skill.
+
+## [2026-05-25] ingest | Backend Drizzle Schema Organization
+- Added raw internal decision source for Drizzle schema organization.
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Tech Stacks Index.
