@@ -107,3 +107,9 @@
 - Added raw internal decision source for Drizzle schema organization.
 - Updated: Backend Stack: Bun + Elysia.
 - Updated: Tech Stacks Index.
+
+## [2026-05-25] ingest | Backend Drizzle Schema Entrypoint
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Tech Stacks Index.
+- Updated: Backend API: Bun + Elysia skill.
+- Kept the backend stack in draft status and made `src/db/schema/index.ts` the single Drizzle Kit schema entrypoint instead of listing domain files one by one.

@@ -259,8 +259,8 @@ Database rules:
 Drizzle schema organization:
 - Small prototypes with only a few tables may use a single `src/db/schema.ts`.
 - Production SaaS APIs and backend API projects with multiple business domains split schema definitions by domain under `src/db/schema/`.
-- Use `src/db/schema/index.ts` as the public schema entrypoint and re-export each domain file from it.
-- Configure Drizzle Kit with an explicit glob such as `schema: "./src/db/schema/*.ts"` or an explicit array of domain schema files.
+- Use `src/db/schema/index.ts` as the public schema entrypoint and import or re-export every domain-specific schema file from it.
+- Configure Drizzle Kit to point only at the entrypoint with `schema: "./src/db/schema/index.ts"`; do not make `drizzle.config.ts` define every domain schema file one by one.
 - Initialize Drizzle with the merged schema object from the schema entrypoint using `drizzle(sql, { schema })`.
 - Split by business domain, not by object type. Prefer `auth.ts`, `workspaces.ts`, `billing.ts`, `media.ts`, `webhooks.ts`, and `audit.ts` over folders such as `tables/`, `relations/`, and `indexes/`.
 - Keep each domain's tables, relations, indexes, foreign keys, and constraints close together unless the file becomes genuinely large.
@@ -315,7 +315,7 @@ import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/db/schema/*.ts",
+  schema: "./src/db/schema/index.ts",
   out: "./src/db/migrations",
   dbCredentials: {
     url: process.env.DATABASE_URL!,
