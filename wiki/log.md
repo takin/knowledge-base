@@ -98,3 +98,7 @@
 - Updated: Backend Stack: Bun + Elysia.
 - Updated: Web Stack: React + Vite Dashboard.
 - Updated: Tech Stacks Index.
+
+## [2026-05-25] maintenance | Backend Drizzle Schema Organization
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Backend API: Bun + Elysia skill.

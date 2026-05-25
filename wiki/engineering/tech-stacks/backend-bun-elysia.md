@@ -1,6 +1,6 @@
 # Backend Stack: Bun + Elysia
 
-Updated: 2026-05-23
+Updated: 2026-05-25
 Status: Draft
 Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
 Platform: Backend API
@@ -255,6 +255,18 @@ Database rules:
 - API and worker `DATABASE_URL` values point to PgBouncer, not directly to Postgres.
 - Drizzle/Bun SQL pools are bounded per API/worker instance.
 - Raw SQL strings are banned unless using Drizzle's parameterized `sql` helper with a documented reason.
+
+Drizzle schema organization:
+- Small prototypes with only a few tables may use a single `src/db/schema.ts`.
+- Backend API projects with multiple business domains split schema definitions by domain under `src/db/schema/`.
+- Use `src/db/schema/index.ts` as the public schema entrypoint and re-export each domain file from it.
+- Configure Drizzle Kit with `schema: "./src/db/schema"` or an explicit glob such as `schema: "./src/db/schema/*.ts"`.
+- Initialize Drizzle with the merged schema object from the schema entrypoint, for example `import * as schema from "./schema"`.
+- Split by business domain, not by object type. Prefer `auth.ts`, `workspaces.ts`, `billing.ts`, `media.ts`, `webhooks.ts`, and `audit.ts` over folders such as `tables/`, `relations/`, and `indexes/`.
+- Keep each domain's tables, relations, indexes, and constraints close together unless the file becomes genuinely large.
+- Tables that are tightly coupled should stay in the same domain file.
+- Cross-domain foreign keys are allowed, but the ownership boundary should remain clear.
+- Shared enums, reusable column helpers, and common timestamp/tenant columns may live in `common.ts` or `enums.ts`.
 
 Primary key strategy:
 - Choose primary keys by workload, exposure, and relational fan-out.
