@@ -1,8 +1,8 @@
 # Mobile Stack: React Native + Expo
 
-Updated: 2026-05-22
+Updated: 2026-05-26
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
 Platform: Mobile
 Runtime: Expo / JavaScript
 Framework: React Native + Expo Router
@@ -41,6 +41,10 @@ This stack maps web product standards to React Native with Expo Router, NativeWi
 - NativeWind v4 requires Babel preset configuration.
 - Do not use `StyleSheet.create()` for normal product UI; use NativeWind utility classes. `StyleSheet` is allowed for performance-critical animations or third-party integration.
 - Maestro is the standard mobile E2E runner and flows live in `tests/e2e/`.
+- Mobile test files live in the top-level `tests/` hierarchy, not beside implementation files under `src/` or `app/`.
+- Unit tests live in `tests/unit/`, integration tests in `tests/integration/`, and Maestro E2E flows in `tests/e2e/`.
+- Shared mobile test helpers, fixtures, and factories live under `tests/helpers/`, `tests/fixtures/`, or `tests/factories/`.
+- Do not use adjacent `__tests__/` directories or colocated `*.test.*` / `*.spec.*` files inside implementation folders.
 
 ## NativeWind Rationale
 

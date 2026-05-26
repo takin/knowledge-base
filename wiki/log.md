@@ -113,3 +113,9 @@
 - Updated: Tech Stacks Index.
 - Updated: Backend API: Bun + Elysia skill.
 - Kept the backend stack in draft status and made `src/db/schema/index.ts` the single Drizzle Kit schema entrypoint instead of listing domain files one by one.
+
+## [2026-05-26] lint | Raw/wiki sync audit
+- Verified all raw Markdown sources are referenced by wiki articles and no raw/wiki links are broken.
+- Updated: Mobile Stack: React Native + Expo.
+- Updated: Tech Stacks Index.
+- Left attachment-only raw files unexpanded because they are supporting assets, not standalone Markdown sources.
