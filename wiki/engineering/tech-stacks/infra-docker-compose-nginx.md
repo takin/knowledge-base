@@ -204,12 +204,12 @@ Worker shutdown sequence:
 
 ## Scale Tiers
 
-| Tier | Concurrency | Orchestration | Notes |
-| --- | ---: | --- | --- |
-| Tier 0 | 100 | Single VM Docker Compose | MVP/prototype, co-located services |
-| Tier 1 | 2K | Docker Compose | Nginx, API, worker, PgBouncer, PostgreSQL 18+, Redis 8+, Grafana stack |
-| Tier 2 | 10K | Docker Compose or light K8s | More API instances, workers, DB read replicas, observability stack |
-| Tier 3 | 100K | Kubernetes | API HPA, worker HPA, PDB, Redis 8+ Cluster, read replicas, OS tuning, observability stack |
+| Tier   | Concurrency | Orchestration               | Notes                                                                                     |
+| ------ | ----------: | --------------------------- | ----------------------------------------------------------------------------------------- |
+| Tier 0 |         100 | Single VM Docker Compose    | MVP/prototype, co-located services                                                        |
+| Tier 1 |          2K | Docker Compose              | Nginx, API, worker, PgBouncer, PostgreSQL 18+, Redis 8+, Grafana stack                    |
+| Tier 2 |         10K | Docker Compose or light K8s | More API instances, workers, DB read replicas, observability stack                        |
+| Tier 3 |        100K | Kubernetes                  | API HPA, worker HPA, PDB, Redis 8+ Cluster, read replicas, OS tuning, observability stack |
 
 Tier 3 requirements:
 - API Deployment with `maxUnavailable: 0`, `minReadySeconds`, readiness/liveness probes, `preStop` sleep, and sufficient `terminationGracePeriodSeconds`.

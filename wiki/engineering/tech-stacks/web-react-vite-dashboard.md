@@ -1,13 +1,13 @@
 # Web Stack: React + Vite Dashboard
 
-Updated: 2026-05-23
+Updated: 2026-06-04
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23)
+Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
 Platform: Web / authenticated SaaS dashboard
 Runtime: Bun
 Framework: React + Vite SPA
 Primary Use Case: Authenticated SaaS dashboards consuming a mandatory separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
-Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md)
+Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
 
 ## Summary
 
@@ -18,6 +18,8 @@ The backend API is mandatory and owns authentication, authorization, validation,
 SaaS administration screens for tenant settings, tenant users, subscriptions, entitlements, billing recovery, and soft-lock remediation are dashboard UI concerns only. The backend owns the administration rules, tenant state, subscription state, soft-lock enforcement, operator overrides, and audit records.
 
 This article is the source of truth for dashboard-specific static deployment. Infrastructure docs retain generic Docker Compose and Nginx rules, but dashboard deployment details live here.
+
+For SaaS apps that require OAuth2/OIDC callback handling, server-side code exchange, Redis-backed HttpOnly app sessions, protected server functions, BFF behavior, or full-stack app-server resource ownership, use [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md) instead of this static SPA stack.
 
 ## Runtime And Toolchain
 
@@ -405,6 +407,7 @@ Required E2E coverage before production:
 ## See Also
 
 - [Astro Landing](web-astro-landing.md)
+- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)

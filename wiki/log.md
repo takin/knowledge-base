@@ -119,3 +119,9 @@
 - Updated: Mobile Stack: React Native + Expo.
 - Updated: Tech Stacks Index.
 - Left attachment-only raw files unexpanded because they are supporting assets, not standalone Markdown sources.
+
+## [2026-06-04] ingest | Web Stack: TanStack Start OAuth/OIDC App
+- Created: Web Stack: TanStack Start OAuth/OIDC App.
+- Updated: Tech Stacks Index.
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Backend Stack: Bun + Elysia.

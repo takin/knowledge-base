@@ -1,13 +1,13 @@
 # Backend Stack: Bun + Elysia
 
-Updated: 2026-05-25
+Updated: 2026-06-04
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
 Platform: Backend API
 Runtime: Bun
 Framework: Elysia
 Primary Use Case: Standalone SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
-Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md)
+Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
 
 ## Summary
 
@@ -595,5 +595,6 @@ Test placement rules:
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
+- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
 - [React + Vite Dashboard](web-react-vite-dashboard.md)
 - [Mobile: React Native + Expo](mobile-react-native-expo.md)
