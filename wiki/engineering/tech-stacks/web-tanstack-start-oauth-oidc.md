@@ -468,6 +468,11 @@ Rules:
 - Runtime container receives secrets via environment or approved secrets manager, not image layers.
 - Health and readiness endpoints must not expose env vars, secret names, credentials, internal hostnames, image tags, or detailed config.
 - Runtime images must not include source files, tests, caches, local `.env` files, or public source maps unless explicitly required and reviewed.
+- Use pinned Alpine, slim, distroless, or the smallest production-suitable image variants where available and compatible.
+- Final app/worker images may contain runtime JS dependencies, but production dependencies only.
+- Do not copy development `node_modules` into the final app/worker image.
+- Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
 
 Baseline Docker Compose services:
 
@@ -552,6 +557,9 @@ Test placement rules:
 | Exposing provider tokens to client components | Leaks auth boundary | Server-only token handling |
 | Mixing BFF and full-stack ownership accidentally | Unclear authority and duplicated business rules | Document resource ownership profile |
 | Static Nginx deployment | TanStack Start needs server runtime | Runtime container behind Nginx |
+| Large app/worker runtime image without ADR | Bloats image and increases attack surface | Alpine/slim/smallest compatible runtime image |
+| Final app/worker image includes dev dependencies | Bloats image and ships build/test tooling | Production-only runtime dependency install |
+| Copying development `node_modules` into runtime stage | Carries test/build/lint/codegen packages into production | Reinstall or copy production dependencies only |
 | `useEffect` data fetching | Race conditions and stale state | TanStack Query and route loaders |
 | API response data in global store | Duplicates server cache | TanStack Query |
 | Scattered `useState` for shared or workflow state | State becomes duplicated, inconsistent, and hard to reason about across routes/components | Use URL state, TanStack Query, TanStack Form, TanStack Store/Zustand, route context, or job status APIs based on state ownership |

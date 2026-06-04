@@ -1775,7 +1775,7 @@ flowchart TB
 Backend projects use one Bun application image for both the API process and worker process. Docker Compose changes runtime behavior through the container command.
 
 Rules:
-- Use `oven/bun:<pinned-version>` as the base image. Do not use `latest`.
+- Use a pinned smallest production-suitable Bun image, preferably Alpine or slim if available and compatible. Do not use `latest`.
 - Build one application image, for example `example-api:${TAG}`.
 - The `api` service uses the image default command.
 - The `worker` service uses the same image with `command: ["bun", "run", "worker"]`.
@@ -1788,6 +1788,11 @@ Rules:
 - Do not bake secrets into Docker images through `ARG`, `ENV`, copied `.env` files, generated config, or build logs.
 - Do not copy `.git`, local caches, test reports, coverage, Playwright artifacts, `.env*`, or source maps into production images unless explicitly approved.
 - Require `bun.lock` and install with `bun install --frozen-lockfile`.
+- Follow the infrastructure Docker image size and final runtime policy.
+- Final API/worker images must contain production dependencies only.
+- Do not copy development `node_modules` into the runtime stage.
+- Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages must use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
 
 Recommended multi-stage Dockerfile:
 
@@ -2029,7 +2034,10 @@ The following are banned:
 | Exposing API container ports to the host | Nginx is the only host-facing service |
 | Running workers inside the API process | Separate worker process/container |
 | Manual DB schema changes | Drizzle migrations |
-| Using `oven/bun:latest` | Pinned Bun image version |
+| Using `oven/bun:latest` | Pinned smallest production-suitable Bun image version |
+| Large non-minimal runtime image without ADR | Alpine/slim/smallest compatible runtime image |
+| Final API/worker image includes dev dependencies | Production-only runtime dependency install |
+| Copying development `node_modules` into runtime stage | Reinstall or copy production dependencies only |
 | Separate API and worker images without a concrete reason | One application image with different Compose commands |
 | Running production containers as root | Non-root runtime user |
 | Baking secrets into Docker images | Runtime environment injection through Vault or approved secrets manager |

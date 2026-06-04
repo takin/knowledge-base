@@ -101,6 +101,11 @@ Rules:
 - Static production artifacts must not include public `.map` files unless a security exception explicitly allows public source maps.
 - If source maps are needed for monitoring, CI uploads them privately to the monitoring provider and removes them from served assets.
 - CI must verify the Docker image does not contain `.env`, `.git`, test reports, coverage, Playwright artifacts, local caches, or dependency install caches.
+- CI must verify final Docker images use pinned Alpine, slim, distroless, or the smallest production-suitable image variants unless an ADR documents why a larger base image is required.
+- CI should fail or warn when final runtime images exceed the project-defined image size budget.
+- CI must inspect final JS/TS runtime images to verify development dependencies are absent from final `node_modules`.
+- CI must verify final JS/TS runtime images do not contain development `node_modules`, test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, codegen-only packages, or package manager caches unless an ADR documents a runtime need.
+- Static dashboard runtime images must contain zero `node_modules`.
 
 ---
 
@@ -121,7 +126,9 @@ Rules:
 9. Vitest — unit and integration tests
 10. Bundle budget or bundle analysis check for frontend changes
 11. Docker build — verify the image builds without error
-12. Static artifact scan — fail on public source maps, `.env`, `.git`, test reports, coverage, Playwright artifacts, and local caches in the runtime image
+12. Docker image size and base-image review — fail or warn when the runtime image exceeds budget, uses `latest`, or uses a large non-minimal base image without ADR
+13. Final JS dependency review — fail when final runtime `node_modules` contains dev dependencies or development-only packages
+14. Static artifact scan — fail on public source maps, `.env`, `.git`, test reports, coverage, Playwright artifacts, and local caches in the runtime image
 
 When the repository includes a standalone backend API, CI also runs the backend checks from the backend stack: OpenAPI generation/drift, JWT/JWKS auth tests, RBAC/scope tests, tenant isolation tests, rate limit tests, idempotency tests, CORS/cookie/CSRF tests where applicable, webhook tests, worker/queue retry tests, and API/worker Docker smoke tests.
 

@@ -328,10 +328,14 @@ TLS rules:
 
 Artifact hardening:
 - Runtime stage contains only built static assets and Nginx config files.
+- Runtime stage contains zero `node_modules`.
+- Do not copy development `node_modules` into the final image.
 - Do not install Certbot in the dashboard image.
 - Do not mount `dist/` from host as the production deployment mechanism.
 - Do not copy public source maps into served assets.
 - `.dockerignore` must exclude `.git`, `.github`, `.env`, `.env.*`, caches, coverage, Playwright reports, test results, logs, and `*.map` unless a private source-map upload flow removes them before final image.
+- Use pinned smallest production-suitable build and runtime image variants where available and compatible; never use `latest`.
+- Every dashboard Docker build requires a final-image review confirming the image contains only `dist/`, Nginx config, entrypoint, and minimal runtime files.
 
 ## Security
 
@@ -399,6 +403,8 @@ Required E2E coverage before production:
 | Colocated tests or adjacent `__tests__/` directories inside `src/` | Mixes implementation and test concerns | Top-level `tests/` hierarchy |
 | Running `vite preview` in production | Not production-grade | Nginx static runtime |
 | Proxying to a dashboard app server | Unnecessary runtime hop | Nginx serves `dist/` directly |
+| Dashboard runtime image contains `node_modules` | Static runtime needs only built assets and Nginx | Final Nginx image with `dist/` only |
+| Large dashboard runtime image without ADR | Bloats image and increases attack surface | Approved minimal Brotli Nginx runtime image |
 | Missing SPA fallback | Deep links 404 | `try_files $uri $uri/ /index.html` |
 | Baking certificates into images | Leaks secrets and blocks rotation | Let's Encrypt volume + Certbot sidecar |
 | Wildcard credentialed CORS | Allows unintended origins | Explicit origins only |

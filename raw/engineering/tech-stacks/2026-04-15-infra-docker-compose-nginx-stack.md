@@ -312,6 +312,41 @@ envsubst '${NGINX_SERVER_NAME} ${NGINX_UPSTREAM_HOST} ${NGINX_UPSTREAM_PORT} ${N
 exec nginx -g 'daemon off;'
 ```
 
+### 19.2.0 Docker Image Size And Final Runtime Policy
+
+Use Alpine, slim, distroless, or the smallest production-suitable image variant by default. Avoid large general-purpose Docker images when a smaller runtime image is available.
+
+Rules:
+- Pin exact image versions; never use `latest`.
+- Prefer Alpine, slim, distroless, or smallest official production-suitable image variants.
+- Avoid large general-purpose images unless required by native dependencies, libc compatibility, debugging, or vendor constraints.
+- Non-minimal base image usage requires an ADR or documented implementation note.
+- Final runtime images contain only runtime artifacts, production dependencies, required OS packages, and runtime config.
+- Build tools, package manager caches, test artifacts, Playwright browsers, coverage, source maps meant for private upload, local files, `.env*`, `.git`, and development-only files must not remain in final runtime images.
+
+#### JavaScript And TypeScript Runtime Images
+
+Final runtime images for JavaScript and TypeScript applications must not include development dependencies or development `node_modules`.
+
+Rules:
+- Build stages may install development dependencies.
+- Runtime stages must install or receive production dependencies only.
+- Do not copy development `node_modules` into the final runtime image.
+- Do not run final runtime with `node_modules` produced by a development install.
+- Use `bun install --frozen-lockfile --production` or the package-manager equivalent in the runtime dependency stage.
+- If a dependency is needed at runtime, it belongs in production dependencies.
+- If a dependency is needed only for build, test, typecheck, linting, formatting, codegen, or local development, it must not be present in the final image.
+- Every JS/TS Docker build requires a final-image dependency review step.
+- Review must verify that dev dependencies are absent from final `node_modules`.
+- Review must verify package manager caches and development-only artifacts are absent.
+- CI should fail when final images contain known dev-only packages such as test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, or codegen-only packages unless an ADR documents a runtime need.
+
+Stack-specific final image rules:
+- React + Vite Dashboard: final Nginx image must contain zero `node_modules`; only `dist/`, Nginx config, entrypoint, and minimal runtime files.
+- TanStack Start OAuth/OIDC App: final app/worker image may contain runtime JS dependencies, but production dependencies only.
+- Backend Bun + Elysia: final API/worker image may contain runtime JS dependencies, but production dependencies only.
+- Infrastructure services: prefer pinned Alpine/slim/minimal variants for Redis, Nginx, Certbot, and other service images where production-suitable.
+
 ### 19.2.1 Static SPA Dashboard Profile
 
 Static Vite dashboard deployment is a specialized profile, not the generic reverse-proxy runtime-service profile above.

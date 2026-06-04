@@ -1,17 +1,17 @@
 # CI and Testing Stack: TypeScript + React
 
-Updated: 2026-05-24
+Updated: 2026-06-04
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
 Platform: Delivery / quality
 Runtime: Bun
 Framework: TypeScript + React
-Primary Use Case: Oxc linting/formatting, type checking, unit/integration/component/E2E tests, React diagnostics, React Compiler checks, bundle budgets, static artifact scans, and GitHub Actions pipelines
-Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
+Primary Use Case: Oxc linting/formatting, type checking, unit/integration/component/E2E tests, React diagnostics, React Compiler checks, bundle budgets, server-function and worker checks, static/runtime artifact scans, and GitHub Actions pipelines
+Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
 
 ## Summary
 
-This stack defines quality gates for TypeScript React products. New dashboard projects use Oxlint, Oxfmt, strict TypeScript, Vitest, Testing Library, Playwright, React Doctor, React Compiler diagnostics, dependency audit, bundle analysis, Docker build, and static artifact scans.
+This stack defines quality gates for TypeScript React products. New dashboard and TanStack Start projects use Oxlint, Oxfmt, strict TypeScript, Vitest, Testing Library, Playwright, React Doctor, React Compiler diagnostics, dependency audit, bundle analysis, Docker build, and artifact scans. TanStack Start OAuth/OIDC apps also require server-function, Redis session, OAuth callback, CSRF, BullMQ enqueue, worker, retry, idempotency, and failure-normalization coverage.
 
 ## Linting And Formatting
 
@@ -27,7 +27,7 @@ This stack defines quality gates for TypeScript React products. New dashboard pr
 - Strict mode is mandatory.
 - No `any` types without an inline lint suppression comment and a short explanation.
 - Prefer `unknown` over `any` when the type is genuinely unknown.
-- Backend API boundaries are typed through route schemas and generated OpenAPI clients. Dashboard-only code must not define server functions.
+- Backend API boundaries are typed through route schemas and generated OpenAPI clients. Dashboard-only Vite code must not define server functions; TanStack Start server functions are allowed only in server-owned modules and must keep server-only imports out of client components.
 
 ## Testing
 
@@ -35,6 +35,8 @@ This stack defines quality gates for TypeScript React products. New dashboard pr
 | --- | --- | --- |
 | Unit / integration | Vitest | Pure functions, schemas, backend services/controllers where present, stores |
 | Component | Vitest + Testing Library | Shadcn/custom component rendering and interaction |
+| Server function | Vitest / integration harness | TanStack Start server functions, auth/session checks, CSRF, input validation, tenant context |
+| Worker / queue | Vitest / integration harness | BullMQ enqueueing, processors, retries, backoff, idempotency, failure normalization |
 | End-to-end | Playwright | Auth, onboarding, core feature happy path, destructive/payment flows |
 | React health scan | React Doctor | React correctness, performance, security, and architecture diagnostics |
 | Bundle analysis | Project-approved Vite bundle analyzer or size-limit check | Initial app shell, route chunks, dependency growth |
@@ -48,6 +50,19 @@ Test placement rules:
 - Do not use adjacent `__tests__/` directories inside `src/`.
 - Do not place `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` beside implementation files.
 - Vitest and Playwright config must target the top-level test directories instead of scanning colocated tests in `src/`.
+
+TanStack Start OAuth/OIDC app coverage:
+- OAuth/OIDC login redirect creation.
+- Callback state validation, including invalid state rejection.
+- Server-side code exchange error normalization.
+- Redis-backed session creation, lookup, invalidation, and logout.
+- CSRF rejection for cookie-authenticated unsafe methods.
+- Protected route redirects when unauthenticated.
+- Protected server function rejection when unauthenticated.
+- Tenant/RBAC checks for server functions and workers.
+- BullMQ enqueue behavior and job payload schema validation.
+- Worker retry/backoff, idempotency, and failed-job status normalization.
+- One E2E async job flow from enqueue to completed or failed product status.
 
 ## React Doctor
 
@@ -79,13 +94,20 @@ React Compiler is mandatory for dashboard production builds.
 - Do not silence compiler diagnostics without an ADR explaining the unsafe pattern and remediation plan.
 - Avoid adding `useMemo`, `useCallback`, or `React.memo` as a reflexive fix. Prefer pure, compiler-friendly code first.
 
-## Bundle, Source Map, And Static Artifact Checks
+## Bundle, Source Map, And Artifact Checks
 
 - CI should fail or warn when the authenticated dashboard shell exceeds the project budget.
 - Bundle analysis must identify top dependency contributors when bundle size changes materially.
 - Static production artifacts must not include public `.map` files unless a security exception explicitly allows them.
 - If source maps are needed for monitoring, CI uploads them privately to the monitoring provider and removes them from served assets.
 - CI must verify the Docker image does not contain `.env`, `.git`, test reports, coverage, Playwright artifacts, local caches, or dependency install caches.
+- TanStack Start runtime images must not include local `.env` files, test artifacts, coverage, Playwright reports, dependency caches, public source maps, or unneeded source files beyond the approved runtime bundle.
+- Worker images use the same app image with a worker command; CI must smoke test both the app start command and worker start command when workers are present.
+- CI must verify final Docker images use pinned Alpine, slim, distroless, or the smallest production-suitable image variants unless an ADR documents why a larger base image is required.
+- CI should fail or warn when final runtime images exceed the project-defined image size budget.
+- CI must inspect final JS/TS runtime images to verify development dependencies are absent from final `node_modules`.
+- CI must verify final JS/TS runtime images do not contain development `node_modules`, test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, codegen-only packages, or package manager caches unless an ADR documents a runtime need.
+- Static dashboard runtime images must contain zero `node_modules`.
 
 ## Pull Request Pipeline
 
@@ -98,11 +120,17 @@ React Compiler is mandatory for dashboard production builds.
 7. `bun audit` dependency vulnerability scan.
 8. TanStack supply-chain guard for affected `@tanstack/*` versions and advisory indicators.
 9. Vitest unit and integration tests.
-10. Bundle budget or bundle analysis for frontend changes.
-11. Docker build.
-12. Static artifact scan for source maps, secrets, source control metadata, reports, coverage, Playwright artifacts, and caches.
+10. TanStack Start server-function and Redis session tests when applicable.
+11. BullMQ enqueue, worker, retry, idempotency, and failure-normalization tests when workers are present.
+12. Bundle budget or bundle analysis for frontend changes.
+13. Docker build.
+14. Docker image size and base-image review.
+15. Final JS dependency review for dev dependency leakage in final `node_modules`.
+16. Static/runtime artifact scan for source maps, secrets, source control metadata, reports, coverage, Playwright artifacts, and caches.
 
 When a repository includes a standalone backend API, CI also runs backend checks from [Backend: Bun + Elysia](backend-bun-elysia.md): OpenAPI generation/drift, JWT/JWKS auth tests, RBAC/scope tests, tenant isolation tests, rate limit tests, idempotency tests, CORS/cookie/CSRF tests where applicable, webhook tests, worker/queue retry tests, and API/worker Docker smoke tests.
+
+When a repository uses [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md), CI also runs OAuth callback/session tests, protected server-function tests, Redis-backed session tests, CSRF tests, BullMQ worker tests when workers are present, and app/worker Docker smoke tests.
 
 ## Merge To Main Pipeline
 
@@ -121,5 +149,6 @@ When a repository includes a standalone backend API, CI also runs backend checks
 ## See Also
 
 - [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)

@@ -605,13 +605,17 @@ ENTRYPOINT ["/entrypoint.sh"]
 ```
 
 Rules:
-- Use `oven/bun:<pinned-version>` in build stages; never use `latest`.
-- Use `fholzer/nginx-brotli:<pinned-version>` in the runtime stage; never use `latest`.
+- Use a pinned smallest production-suitable Bun image in build stages, preferably Alpine or slim if available and compatible; never use `latest`.
+- Use `fholzer/nginx-brotli:<pinned-version>` or the approved smallest production-suitable Brotli Nginx runtime image in the runtime stage; never use `latest`.
 - The runtime stage contains only built static assets and Nginx config files.
+- The runtime stage must contain zero `node_modules`.
+- Do not copy development `node_modules` into the final image.
 - Do not install Certbot into the dashboard image.
 - Do not run `bun`, `node`, `vite`, or `vite preview` in the runtime image.
 - Do not mount `dist/` from the host as the production deployment mechanism.
 - Do not copy production source maps into the served static directory unless they are access-controlled and explicitly approved.
+- Follow the infrastructure Docker image size and final runtime policy.
+- Every dashboard Docker build requires a final-image review confirming the image contains only `dist/`, Nginx config, entrypoint, and minimal runtime files.
 
 Required `.dockerignore`:
 
@@ -991,6 +995,8 @@ The following are banned:
 | Hardcoded API URL | Breaks environments and previews | Environment config |
 | Running `vite preview` in production | Preview server is not production-grade | Nginx static runtime |
 | Running Bun/Node static server in production | Adds runtime surface the SPA does not need | Nginx serves `dist/` directly |
+| Dashboard runtime image contains `node_modules` | Static runtime needs only built assets and Nginx | Final Nginx image with `dist/` only |
+| Large dashboard runtime image without ADR | Bloats image and increases attack surface | Approved minimal Brotli Nginx runtime image |
 | Deploying without Docker Compose | Makes setup and deployment inconsistent | Standard Docker Compose contract |
 | Deploying without Nginx | Skips the standard TLS, compression, headers, and cache baseline | Nginx static runtime |
 | Proxying to a dashboard app server | Adds an unnecessary runtime hop for static SPA | Nginx serves `dist/` directly |

@@ -529,7 +529,7 @@ Deployment uses Docker Compose behind Nginx on VPS. Baseline services are `nginx
 
 Dockerfile standard:
 - One Bun application image is used for both API and worker.
-- Use pinned `oven/bun:<version>`, never `latest`.
+- Use a pinned smallest production-suitable Bun image, preferably Alpine or slim if available and compatible; never `latest`.
 - API uses the default command; worker uses `command: ["bun", "run", "worker"]`.
 - The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
 - Let's Encrypt issuance and renewal must be handled by Certbot sidecars with shared certificate volumes; do not install Certbot into the API or Nginx image.
@@ -537,6 +537,10 @@ Dockerfile standard:
 - Never bake secrets into images.
 - Require `bun.lock` and `bun install --frozen-lockfile`.
 - `.dockerignore` excludes `.env*`, `.git`, `node_modules`, `.venv`, coverage, test reports, Playwright reports, caches, and local artifacts.
+- Final API/worker images contain production dependencies only.
+- Do not copy development `node_modules` into the runtime stage.
+- Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
 
 ## Testing And CI
 
@@ -587,7 +591,10 @@ Test placement rules:
 | Missing telemetry | OpenTelemetry from day one |
 | Exposing API container ports to host | Nginx is the only host-facing service |
 | Workers inside API process | Separate worker process/container |
-| `oven/bun:latest` | Pinned Bun image |
+| `oven/bun:latest` | Pinned smallest production-suitable Bun image |
+| Large non-minimal runtime image without ADR | Alpine/slim/smallest compatible runtime image |
+| Final API/worker image includes dev dependencies | Production-only runtime dependency install |
+| Copying development `node_modules` into runtime stage | Reinstall or copy production dependencies only |
 | Infinite retries or unbounded backoff | Bounded attempts, capped exponential backoff, DLQ, alerting |
 
 ## See Also

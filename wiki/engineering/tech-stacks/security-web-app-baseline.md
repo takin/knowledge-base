@@ -1,13 +1,13 @@
 # Security Baseline: Web Applications
 
-Updated: 2026-05-22
+Updated: 2026-06-04
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22); Internal Dashboard Stack draft (2026-05-22)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-22); Internal Dashboard Stack draft (2026-05-22); Internal Infrastructure draft (2026-04-15, updated 2026-06-04)
 Platform: Cross-stack web application security
 Runtime: N/A
 Framework: N/A
 Primary Use Case: HTTP security headers, CSP, CSRF, CORS, JWT/JWKS, rate limiting, input validation, sensitive data, source maps, observability security, queue security, and supply-chain controls
-Raw: [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md)
+Raw: [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md)
 
 ## Summary
 
@@ -106,6 +106,11 @@ Supply-chain rules:
 - Pin exact production dependencies and Docker tags.
 - Commit and review Bun lockfile changes.
 - Review dependencies that add install scripts, binary downloads, credential access, or telemetry.
+- Prefer Alpine, slim, distroless, or the smallest production-suitable Docker image variants.
+- Large non-minimal base images require an ADR or documented implementation note.
+- Final JS/TS runtime images must not include development dependencies or development `node_modules`.
+- Runtime images must not include package manager caches, test artifacts, Playwright browsers, coverage, `.env*`, `.git`, or development-only files.
+- CI must review final image contents for dev dependency leakage and oversized/non-minimal base images.
 - During active supply-chain incidents, CI may temporarily install with lifecycle scripts disabled.
 
 Source map rules:

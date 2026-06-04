@@ -125,3 +125,13 @@
 - Updated: Tech Stacks Index.
 - Updated: Web Stack: React + Vite Dashboard.
 - Updated: Backend Stack: Bun + Elysia.
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: CI and Testing: TypeScript + React.
+
+## [2026-06-04] ingest | Docker Image Size And JS Runtime Dependency Policy
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Web Stack: TanStack Start OAuth/OIDC App.
+- Updated: CI and Testing: TypeScript + React.
+- Updated: Security Baseline: Web Applications.
