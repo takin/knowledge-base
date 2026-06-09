@@ -1,13 +1,13 @@
 # CI and Testing Stack: TypeScript + React
 
-Updated: 2026-06-04
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal standalone repository structure draft (2026-06-09)
 Platform: Delivery / quality
 Runtime: Bun
 Framework: TypeScript + React
 Primary Use Case: Oxc linting/formatting, type checking, unit/integration/component/E2E tests, React diagnostics, React Compiler checks, bundle budgets, server-function and worker checks, static/runtime artifact scans, and GitHub Actions pipelines
-Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
+Raw: [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
@@ -130,6 +130,8 @@ React Compiler is mandatory for dashboard production builds.
 
 When a repository includes a standalone backend API, CI also runs backend checks from [Backend: Bun + Elysia](backend-bun-elysia.md): OpenAPI generation/drift, JWT/JWKS auth tests, RBAC/scope tests, tenant isolation tests, rate limit tests, idempotency tests, CORS/cookie/CSRF tests where applicable, webhook tests, worker/queue retry tests, and API/worker Docker smoke tests.
 
+In standalone repository products, the API repository publishes versioned OpenAPI release artifacts and dashboard/mobile repositories pin the consumed contract version. Dashboard and mobile CI must fail on generated-client drift against that pinned artifact.
+
 When a repository uses [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md), CI also runs OAuth callback/session tests, protected server-function tests, Redis-backed session tests, CSRF tests, BullMQ worker tests when workers are present, and app/worker Docker smoke tests.
 
 ## Merge To Main Pipeline
@@ -152,3 +154,4 @@ When a repository uses [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-
 - [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
+- [Repository Structure: Standalone Repos](repository-structure-standalone.md)

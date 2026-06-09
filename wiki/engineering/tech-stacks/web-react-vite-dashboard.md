@@ -1,13 +1,13 @@
 # Web Stack: React + Vite Dashboard
 
-Updated: 2026-06-04
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
+Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal standalone repository structure draft (2026-06-09)
 Platform: Web / authenticated SaaS dashboard
 Runtime: Bun
 Framework: React + Vite SPA
-Primary Use Case: Authenticated SaaS dashboards consuming a mandatory separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
-Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
+Primary Use Case: Authenticated SaaS dashboards in standalone `<product>-dashboard` repositories consuming a mandatory separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
+Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
@@ -96,8 +96,9 @@ export default defineConfig({
 - Do not call `fetch()` directly from feature code unless the generated client cannot express the endpoint and an inline comment documents why.
 - Regenerate the client whenever backend OpenAPI changes.
 - CI must catch generated-client drift.
-- Client generation uses a committed/CI-generated OpenAPI artifact or an authenticated docs-enabled environment.
+- Client generation uses the API repository's versioned OpenAPI release artifact, a committed/CI-generated OpenAPI artifact, or an authenticated docs-enabled environment.
 - Do not depend on unauthenticated production `/docs/json`.
+- Standalone dashboard repositories pin the consumed API contract version and review upgrades in pull requests.
 
 ## Project Structure
 
@@ -418,3 +419,4 @@ Required E2E coverage before production:
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
 - [Backend: Bun + Elysia](backend-bun-elysia.md)
+- [Repository Structure: Standalone Repos](repository-structure-standalone.md)

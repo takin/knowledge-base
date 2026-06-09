@@ -135,3 +135,12 @@
 - Updated: Web Stack: TanStack Start OAuth/OIDC App.
 - Updated: CI and Testing: TypeScript + React.
 - Updated: Security Baseline: Web Applications.
+
+## [2026-06-09] ingest | Standalone Repository Structure Standard
+- Created: Repository Structure: Standalone Repos.
+- Updated: Tech Stacks Index.
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Web Stack: Astro Landing.
+- Updated: Mobile Stack: React Native + Expo.
+- Updated: CI and Testing: TypeScript + React.

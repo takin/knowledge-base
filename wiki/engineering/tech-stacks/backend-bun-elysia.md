@@ -1,17 +1,17 @@
 # Backend Stack: Bun + Elysia
 
-Updated: 2026-06-04
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal standalone repository structure draft (2026-06-09)
 Platform: Backend API
 Runtime: Bun
 Framework: Elysia
-Primary Use Case: Standalone SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
-Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
+Primary Use Case: Standalone `<product>-api` SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
+Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
-This is the current backend API standard for standalone Bun services. It uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, backend-owned SaaS administration for tenants/users/subscriptions/soft locks, PostgreSQL 18+/Drizzle/PgBouncer for durable data, Redis 8+/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
+This is the current backend API standard for standalone Bun services. Backend API repositories use the `<product>-api` naming convention by default. The stack uses Elysia for HTTP, Oxc/Oxlint/Oxfmt for JavaScript/TypeScript tooling, OpenAPI 3.1 as the official client contract, JWT/JWK/JWKS with `jose` for auth, RBAC/scopes for authorization, backend-owned SaaS administration for tenants/users/subscriptions/soft locks, PostgreSQL 18+/Drizzle/PgBouncer for durable data, Redis 8+/BullMQ for distributed coordination and workers, S3-compatible storage for media, and OpenTelemetry/Pino for observability.
 
 The stack has two product profiles:
 - `internal-api` for dashboards, mobile apps, internal operators, and first-party machine clients.
@@ -49,6 +49,8 @@ Required script contract:
 ## API Contract
 
 OpenAPI is the official contract for dashboard, mobile, public SDK, third-party, and CI drift workflows. Eden Treaty is allowed only for internal TypeScript-only tooling and must not be the official dashboard/mobile/public contract.
+
+Standalone API repositories publish versioned OpenAPI artifacts from the API repository, preferably as GitHub Release assets named `openapi.v<version>.json` with checksum and changelog assets. Dashboard and mobile repositories pin the consumed contract version and regenerate clients from that artifact.
 
 Rules:
 - Use `@elysiajs/openapi`, not deprecated Swagger plugins.
@@ -605,3 +607,4 @@ Test placement rules:
 - [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
 - [React + Vite Dashboard](web-react-vite-dashboard.md)
 - [Mobile: React Native + Expo](mobile-react-native-expo.md)
+- [Repository Structure: Standalone Repos](repository-structure-standalone.md)

@@ -1,17 +1,17 @@
 # Web Stack: Astro Landing
 
-Updated: 2026-05-22
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22)
+Sources: Internal Tech Stacks draft (2026-05-22); Internal standalone repository structure draft (2026-06-09)
 Platform: Web / public landing
 Runtime: Bun
 Framework: Astro
 Primary Use Case: Public marketing websites, SEO pages, MDX-in-repo blogs, static-first landing pages, and Cloudflare Pages deployment
-Raw: [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md)
+Raw: [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
-Astro is the standard for landing page projects. Landing repositories are standalone, separate from dashboard and API repositories. The baseline is static-first, MDX-in-repo, SEO-oriented, and deployed to Cloudflare Pages as static `dist/` output.
+Astro is the standard for landing page projects. Landing repositories are standalone under the `<product>-landing` naming convention, separate from dashboard, API, and mobile repositories. The baseline is static-first, MDX-in-repo, SEO-oriented, and deployed to Cloudflare Pages as static `dist/` output.
 
 Astro SSR is not part of the baseline. It requires a product-level ADR naming the freshness requirement, cache strategy, and deployment adapter. React is allowed only for isolated islands, not for hydrating full marketing pages.
 
@@ -260,3 +260,4 @@ Recommended checks:
 - [React + Vite Dashboard](web-react-vite-dashboard.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
+- [Repository Structure: Standalone Repos](repository-structure-standalone.md)
