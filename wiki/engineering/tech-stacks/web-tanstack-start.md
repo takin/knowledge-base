@@ -1,27 +1,27 @@
-# Web Stack: TanStack Start OAuth/OIDC App
+# Web Stack: TanStack Start
 
 Updated: 2026-06-09
 Status: Draft
-Sources: Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal SSO Auth Project draft (2026-06-09)
+Sources: Internal TanStack Start stack draft (2026-06-04); Internal SSO Auth Project draft (2026-06-09)
 Platform: Web / authenticated SaaS app
 Runtime: Bun
 Framework: TanStack Start
-Primary Use Case: Authenticated SaaS web applications that require OAuth2/OIDC, SSO, server-managed sessions, SSR, protected server functions, BFF behavior, or first-party app-server resource management
-Raw: [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [sso-auth.md](../../../raw/engineering/auth/sso-auth.md)
+Primary Use Case: TanStack Start web projects, commonly authenticated SaaS applications that require OAuth2/OIDC, SSO, server-managed sessions, SSR, protected server functions, BFF behavior, or first-party app-server resource management
+Raw: [2026-06-04-web-tanstack-start-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-stack.md); [sso-auth.md](../../../raw/engineering/auth/sso-auth.md)
 
 ## Summary
 
-TanStack Start is the default web frontend stack for SaaS applications that require OAuth2 or OIDC authentication through a separate authorization service.
+TanStack Start is the default web stack for projects that require a production web-server runtime, including OAuth2/OIDC authentication, server-managed sessions, protected server functions, BFF behavior, or full-stack app-server resource ownership.
 
 Use this stack when the web app must initiate OAuth/OIDC login, receive callback routes, exchange authorization codes server-side, manage a secure app session, protect server functions, act as a Backend-for-Frontend, or directly own product resources from a server runtime.
 
 Better Auth is the current self-hosted auth service standard, but this stack stays provider-neutral and can use any standards-compliant OAuth2/OIDC provider. For the dedicated shared SSO platform, [SSO Auth Platform](../auth/sso-auth-platform.md) now defines Better Auth as the MVP authentication engine while the SSO product owns policy, branding, auditability, and app governance. The auth service owns login, SSO, credential handling, consent, issuer metadata, token issuance, JWKS, token revocation, and account-level auth policy. The TanStack Start app owns product session, tenant resolution, route protection, app authorization, server functions, and resource access.
 
-React + Vite remains the dashboard standard for static API-only SPAs. The dividing line is runtime ownership: React + Vite Dashboard is static and consumes a backend API; TanStack Start OAuth/OIDC App has a production server runtime and participates in the authentication/resource boundary.
+React + Vite remains the standard for static API-only SPAs. The dividing line is runtime ownership: React + Vite is static and consumes a backend API; TanStack Start has a production server runtime and participates in the authentication/resource boundary.
 
 ## When To Use This Stack
 
-Use TanStack Start OAuth/OIDC App when:
+Use TanStack Start when:
 
 - OAuth2 Authorization Code Flow with PKCE is required.
 - OIDC Authorization Code Flow with PKCE is required.
@@ -37,11 +37,11 @@ Use TanStack Start OAuth/OIDC App when:
 
 Do not use this stack for public marketing/SEO landing pages, static API-only dashboards, mobile apps, or standalone public backend APIs unless the product intentionally consolidates those surfaces into this app server.
 
-## Relationship To React + Vite Dashboard
+## Relationship To React + Vite
 
-React + Vite Dashboard is still the default for static authenticated dashboards with a mandatory separate backend API.
+React + Vite is still the default for static authenticated dashboards with a mandatory separate backend API.
 
-Use React + Vite Dashboard when:
+Use React + Vite when:
 
 - The dashboard is a static SPA.
 - The backend API is mandatory and authoritative.
@@ -52,7 +52,7 @@ Use React + Vite Dashboard when:
 - The dashboard does not manage server-side app sessions.
 - Production should be a static `dist/` artifact served directly by Nginx.
 
-Use TanStack Start OAuth/OIDC App when the app needs server-side authentication flow handling, server-managed session state, BFF behavior, or full-stack resource ownership.
+Use TanStack Start when the app needs server-side authentication flow handling, server-managed session state, BFF behavior, or full-stack resource ownership.
 
 ## Runtime And Toolchain
 
@@ -469,10 +469,52 @@ Rules:
 - Health and readiness endpoints must not expose env vars, secret names, credentials, internal hostnames, image tags, or detailed config.
 - Runtime images must not include source files, tests, caches, local `.env` files, or public source maps unless explicitly required and reviewed.
 - Use pinned Alpine, slim, distroless, or the smallest production-suitable image variants where available and compatible.
+- Final app/worker runtime images must target below `200 MB`; exceeding the budget requires an ADR or implementation note with measured size and justification.
 - Final app/worker images may contain runtime JS dependencies, but production dependencies only.
 - Do not copy development `node_modules` into the final app/worker image.
+- Do not copy `node_modules` from build/dev stages into the final app/worker image.
+- Final runtime `node_modules` must come only from a dedicated production-only `runtime-deps` stage.
 - Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
-- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
+- In monorepos, copy only package manifests needed by the TanStack Start app or use a minimal generated runtime `package.json` so unrelated workspace packages are not installed.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, TypeScript compilers, linters, formatters, local test utilities, and codegen-only packages are absent from final `node_modules`.
+- Runtime images must not contain source directories, tests, coverage, test reports, build caches, install caches, temporary files, `.env*`, `.git`, or public source maps unless explicitly approved.
+
+Reference Node-compatible runtime Dockerfile pattern:
+
+```dockerfile
+FROM oven/bun:<pinned-version>-alpine AS build
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --linker hoisted
+
+COPY . .
+RUN bun run build
+
+FROM oven/bun:<pinned-version>-alpine AS runtime-deps
+WORKDIR /runtime
+ENV NODE_ENV=production
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --linker hoisted \
+  && rm -rf /root/.bun/install/cache /tmp/*
+
+FROM node:<pinned-version>-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
+
+COPY --from=runtime-deps /runtime/node_modules ./node_modules
+COPY --from=build /app/.output ./.output
+
+EXPOSE 3000
+USER node
+
+CMD ["node", ".output/server/index.mjs"]
+```
+
+Use the Node Alpine runtime only when the TanStack Start/Nitro output is Node-compatible. Use a Bun Alpine/slim runtime when runtime behavior depends on Bun APIs.
 
 Baseline Docker Compose services:
 
@@ -557,9 +599,9 @@ Test placement rules:
 | Exposing provider tokens to client components | Leaks auth boundary | Server-only token handling |
 | Mixing BFF and full-stack ownership accidentally | Unclear authority and duplicated business rules | Document resource ownership profile |
 | Static Nginx deployment | TanStack Start needs server runtime | Runtime container behind Nginx |
-| Large app/worker runtime image without ADR | Bloats image and increases attack surface | Alpine/slim/smallest compatible runtime image |
+| Large app/worker runtime image without ADR | Bloats image and increases attack surface | Alpine/slim/smallest compatible runtime image under the `200 MB` target |
 | Final app/worker image includes dev dependencies | Bloats image and ships build/test tooling | Production-only runtime dependency install |
-| Copying development `node_modules` into runtime stage | Carries test/build/lint/codegen packages into production | Reinstall or copy production dependencies only |
+| Copying development `node_modules` into runtime stage | Carries test/build/lint/codegen packages into production | Copy `node_modules` only from production-only `runtime-deps` |
 | `useEffect` data fetching | Race conditions and stale state | TanStack Query and route loaders |
 | API response data in global store | Duplicates server cache | TanStack Query |
 | Scattered `useState` for shared or workflow state | State becomes duplicated, inconsistent, and hard to reason about across routes/components | Use URL state, TanStack Query, TanStack Form, TanStack Store/Zustand, route context, or job status APIs based on state ownership |
@@ -575,8 +617,8 @@ Test placement rules:
 
 ## See Also
 
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
-- [Astro Landing](web-astro-landing.md)
+- [React + Vite](web-react-vite.md)
+- [Astro](web-astro.md)
 - [Backend: Bun + Elysia](backend-bun-elysia.md)
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)

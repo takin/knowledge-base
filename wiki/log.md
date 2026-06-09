@@ -159,3 +159,21 @@
 - Updated: Auth Index.
 - Updated: Web Stack: TanStack Start OAuth/OIDC App.
 - Added Better Auth as the MVP authentication engine while keeping product policy, branding, auditability, and app governance in the custom SSO platform layer.
+
+## [2026-06-09] ingest | Docker Image Size And Runtime Dependency Policy
+- Updated: Infrastructure Stack: Docker Compose + Nginx.
+- Updated: Backend Stack: Bun + Elysia.
+- Updated: Web Stack: TanStack Start App.
+- Updated: Web Stack: React + Vite Dashboard.
+- Updated: Web Stack: Astro Landing.
+- Updated: CI and Testing Stack: TypeScript + React.
+- Updated: Security Baseline: Web Applications.
+- Updated: Tech Stacks Index.
+- Updated: SSO Auth Platform link to the renamed TanStack Start article.
+
+## [2026-06-09] ingest | Web Stack Neutral Naming
+- Renamed: Web Stack: Astro Landing -> Web Stack: Astro.
+- Renamed: Web Stack: React + Vite Dashboard -> Web Stack: React + Vite.
+- Renamed: Web Stack: TanStack Start App -> Web Stack: TanStack Start.
+- Updated active raw and wiki links to `web-astro`, `web-react-vite`, and `web-tanstack-start`.
+- Kept project-fit guidance inside each stack article so projects decide which stack to use.

@@ -107,10 +107,10 @@ Nginx is not optional. It is the required outside-facing gateway for every deplo
 
 Every deployed backend API runtime service's `docker-compose.yml` includes a dedicated Nginx service that proxies to the API container. The API container exposes its port **only internally** (via `expose:`, not `ports:`). Nginx is the only service bound to the host.
 
-This reverse-proxy shape is for backend APIs and approved runtime application processes. Static Vite dashboard deployments do not use this proxy-to-app shape; they serve `dist/` directly from Nginx as defined in `2026-05-22-web-react-vite-dashboard-stack.md`.
+This reverse-proxy shape is for backend APIs and approved runtime application processes. Static Vite deployments do not use this proxy-to-app shape; they serve `dist/` directly from Nginx as defined in `2026-05-22-web-react-vite-stack.md`.
 
 The deployment artifact must include both:
-- an API image, usually based on `oven/bun`, running the backend service or another approved runtime process;
+- an API image, usually based on `oven/bun:<pinned-version>-alpine` or another pinned Alpine/slim production runtime, running the backend service or another approved runtime process;
 - an Nginx gateway image, based on `fholzer/nginx-brotli:<pinned-version>`, bound to host ports.
 
 The API image must not publish host ports. Direct outside access to the API process bypasses security headers, Brotli/Gzip compression, coarse edge rate limiting, request-size limits, and upstream retry behavior.
@@ -314,11 +314,12 @@ exec nginx -g 'daemon off;'
 
 ### 19.2.0 Docker Image Size And Final Runtime Policy
 
-Use Alpine, slim, distroless, or the smallest production-suitable image variant by default. Avoid large general-purpose Docker images when a smaller runtime image is available.
+All Docker images must use Alpine, slim, distroless, or the smallest production-suitable image variant when compatible. Avoid large general-purpose Docker images when a smaller runtime image is available. The target final runtime image size is below `200 MB`.
 
 Rules:
 - Pin exact image versions; never use `latest`.
-- Prefer Alpine, slim, distroless, or smallest official production-suitable image variants.
+- Prefer Alpine, slim, distroless, or smallest official production-suitable image variants for every build, runtime, and sidecar image.
+- Final runtime images must target below `200 MB`; exceeding this budget requires an ADR or documented implementation note with measured image size and the reason the larger image is necessary.
 - Avoid large general-purpose images unless required by native dependencies, libc compatibility, debugging, or vendor constraints.
 - Non-minimal base image usage requires an ADR or documented implementation note.
 - Final runtime images contain only runtime artifacts, production dependencies, required OS packages, and runtime config.
@@ -332,18 +333,22 @@ Rules:
 - Build stages may install development dependencies.
 - Runtime stages must install or receive production dependencies only.
 - Do not copy development `node_modules` into the final runtime image.
+- Do not copy `node_modules` from any build, deps, test, typecheck, lint, formatting, or codegen stage into the final runtime image.
+- Final runtime `node_modules` must come only from a dedicated production dependency stage, for example `runtime-deps`, created with `bun install --frozen-lockfile --production --linker hoisted` or the package-manager equivalent.
 - Do not run final runtime with `node_modules` produced by a development install.
 - Use `bun install --frozen-lockfile --production` or the package-manager equivalent in the runtime dependency stage.
+- In monorepos, the production dependency stage should copy only the relevant package manifests or use a minimal generated runtime `package.json` so unrelated workspace packages are not installed into the final image.
 - If a dependency is needed at runtime, it belongs in production dependencies.
 - If a dependency is needed only for build, test, typecheck, linting, formatting, codegen, or local development, it must not be present in the final image.
+- Package manager caches, build caches, temporary files, and install metadata that are not needed at runtime must be removed before copying into the final image.
 - Every JS/TS Docker build requires a final-image dependency review step.
 - Review must verify that dev dependencies are absent from final `node_modules`.
 - Review must verify package manager caches and development-only artifacts are absent.
-- CI should fail when final images contain known dev-only packages such as test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, or codegen-only packages unless an ADR documents a runtime need.
+- CI must fail when final images contain known dev-only packages such as test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, or codegen-only packages unless an ADR documents a runtime need.
 
 Stack-specific final image rules:
-- React + Vite Dashboard: final Nginx image must contain zero `node_modules`; only `dist/`, Nginx config, entrypoint, and minimal runtime files.
-- TanStack Start OAuth/OIDC App: final app/worker image may contain runtime JS dependencies, but production dependencies only.
+- React + Vite: final Nginx image must contain zero `node_modules`; only `dist/`, Nginx config, entrypoint, and minimal runtime files.
+- TanStack Start: final app/worker image may contain runtime JS dependencies, but production dependencies only.
 - Backend Bun + Elysia: final API/worker image may contain runtime JS dependencies, but production dependencies only.
 - Infrastructure services: prefer pinned Alpine/slim/minimal variants for Redis, Nginx, Certbot, and other service images where production-suitable.
 
@@ -351,7 +356,7 @@ Stack-specific final image rules:
 
 Static Vite dashboard deployment is a specialized profile, not the generic reverse-proxy runtime-service profile above.
 
-Source of truth: `2026-05-22-web-react-vite-dashboard-stack.md`.
+Source of truth: `2026-05-22-web-react-vite-stack.md`.
 
 Infra-level invariants:
 - Dashboard production deployment must use Docker Compose.
@@ -666,7 +671,7 @@ Important Nginx behavior: if a `location` block defines any `add_header`, it sto
 
 ### 19.6 Static asset caching
 
-Static asset caching is a frontend/web-runtime concern, not a backend API proxy concern. For static Vite dashboard deployments, use the caching rules in `2026-05-22-web-react-vite-dashboard-stack.md`.
+Static asset caching is a frontend/web-runtime concern, not a backend API proxy concern. For static Vite deployments, use the caching rules in `2026-05-22-web-react-vite-stack.md`.
 
 Backend API responses that contain private, transactional, or user-specific data must opt into `Cache-Control: no-store` at the application layer. Public cacheable API responses require explicit product review and must include correct authorization and tenant-isolation guarantees.
 

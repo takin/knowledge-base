@@ -1,17 +1,17 @@
 # Infrastructure Stack: Docker Compose + Nginx
 
-Updated: 2026-06-04
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Dashboard Stack draft (2026-05-22, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-06-09); Internal Dashboard Stack draft (2026-05-22, updated 2026-06-09); Internal TanStack Start stack draft (2026-06-04, updated 2026-06-09)
 Platform: Infrastructure
 Runtime: Docker
 Framework: Docker Compose + Nginx
 Primary Use Case: Backend API deployment, Nginx gatewaying, Vault-backed secrets, TLS, compression, deterministic deploys, observability stack, scale tiers, and Kubernetes upgrade path
-Raw: [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
+Raw: [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-05-22-web-react-vite-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-stack.md); [2026-06-04-web-tanstack-start-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-stack.md)
 
 ## Summary
 
-This stack defines VPS-first infrastructure for backend APIs, TanStack Start app runtimes, and approved runtime services. Nginx is the only host-facing HTTP service; API, app, and worker containers stay internal. Main Nginx gateways use `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default. Static Vite dashboard deployment is a separate specialized profile documented in [React + Vite Dashboard](web-react-vite-dashboard.md).
+This stack defines VPS-first infrastructure for backend APIs, TanStack Start app runtimes, and approved runtime services. Nginx is the only host-facing HTTP service; API, app, and worker containers stay internal. Main Nginx gateways use `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default. Static Vite deployment is a separate specialized profile documented in [React + Vite](web-react-vite.md).
 
 ## Environment And Secrets
 
@@ -34,11 +34,12 @@ Baseline env categories include app config, database, JWT/JWKS, CORS, Redis/Bull
 
 ## Docker Image Size And Final Runtime Policy
 
-Use Alpine, slim, distroless, or the smallest production-suitable image variant by default. Avoid large general-purpose Docker images when a smaller runtime image is available.
+All Docker images use Alpine, slim, distroless, or the smallest production-suitable image variant when compatible. Avoid large general-purpose Docker images when a smaller runtime image is available. The final runtime image target is below `200 MB`.
 
 Rules:
 - Pin exact image versions; never use `latest`.
-- Prefer Alpine, slim, distroless, or smallest official production-suitable image variants.
+- Prefer Alpine, slim, distroless, or smallest official production-suitable image variants for every build, runtime, and sidecar image.
+- Final runtime images must target below `200 MB`; exceeding the budget requires an ADR or implementation note with measured image size and reason.
 - Avoid large general-purpose images unless required by native dependencies, libc compatibility, debugging, or vendor constraints.
 - Non-minimal base image usage requires an ADR or documented implementation note.
 - Final runtime images contain only runtime artifacts, production dependencies, required OS packages, and runtime config.
@@ -49,18 +50,22 @@ JavaScript and TypeScript runtime images:
 - Build stages may install development dependencies.
 - Runtime stages must install or receive production dependencies only.
 - Do not copy development `node_modules` into the final runtime image.
+- Do not copy `node_modules` from build, deps, test, typecheck, lint, formatting, or codegen stages into the final runtime image.
+- Final runtime `node_modules` must come only from a dedicated production dependency stage such as `runtime-deps`, created with `bun install --frozen-lockfile --production --linker hoisted` or equivalent.
 - Do not run final runtime with `node_modules` produced by a development install.
 - Use `bun install --frozen-lockfile --production` or the package-manager equivalent in the runtime dependency stage.
+- In monorepos, copy only relevant package manifests or use a minimal generated runtime `package.json` so unrelated workspace packages are not installed.
 - If a dependency is needed at runtime, it belongs in production dependencies.
 - If a dependency is needed only for build, test, typecheck, linting, formatting, codegen, or local development, it must not be present in the final image.
+- Package manager caches, build caches, temporary files, and install metadata not needed at runtime must be removed before copying into the final image.
 - Every JS/TS Docker build requires a final-image dependency review step.
 - Review must verify that dev dependencies are absent from final `node_modules`.
 - Review must verify package manager caches and development-only artifacts are absent.
-- CI should fail when final images contain known dev-only packages such as test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, or codegen-only packages unless an ADR documents a runtime need.
+- CI must fail when final images contain known dev-only packages such as test runners, linters, formatters, TypeScript compilers, Playwright browser bundles, local test utilities, or codegen-only packages unless an ADR documents a runtime need.
 
 Stack-specific final image rules:
-- React + Vite Dashboard final Nginx image contains zero `node_modules`; only `dist/`, Nginx config, entrypoint, and minimal runtime files are allowed.
-- TanStack Start OAuth/OIDC App final app/worker image may contain runtime JS dependencies, but production dependencies only.
+- React + Vite final Nginx image contains zero `node_modules`; only `dist/`, Nginx config, entrypoint, and minimal runtime files are allowed.
+- TanStack Start final app/worker image may contain runtime JS dependencies, but production dependencies only.
 - Backend Bun + Elysia final API/worker image may contain runtime JS dependencies, but production dependencies only.
 - Infrastructure services prefer pinned Alpine/slim/minimal variants for Redis, Nginx, Certbot, and other service images where production-suitable.
 
@@ -175,9 +180,9 @@ Key rules:
 
 Nginx runtime variables include `NGINX_SERVER_NAME`, `NGINX_UPSTREAM_HOST=api`, `NGINX_UPSTREAM_PORT=3000`, Brotli/Gzip toggles, worker/connection limits, body size, rate limit RPS, and TLS/HSTS switch. Port `80` must serve `/.well-known/acme-challenge/` from the shared Certbot webroot for ACME HTTP-01 validation.
 
-## TanStack Start OAuth/OIDC Runtime Profile
+## TanStack Start Runtime Profile
 
-TanStack Start OAuth/OIDC apps deploy as app and worker runtime processes behind Nginx. They are not static SPA artifacts and must not use the static Vite dashboard profile.
+TanStack Start apps deploy as app and worker runtime processes behind Nginx. They are not static SPA artifacts and must not use the static Vite dashboard profile.
 
 Required baseline services:
 - `nginx`
@@ -268,13 +273,13 @@ Rules:
 
 ## Static SPA Dashboard Profile
 
-Static Vite dashboards do not use the generic proxy-to-API template. They serve `dist/` directly from Nginx and follow [React + Vite Dashboard](web-react-vite-dashboard.md).
+Static Vite deployments do not use the generic proxy-to-API template. They serve `dist/` directly from Nginx and follow [React + Vite](web-react-vite.md).
 
 Dashboard invariants:
 - Docker Compose production deployment.
 - Nginx serves Vite `dist/` directly from `/usr/share/nginx/html`.
 - No Bun, Node, Vite preview, custom static server, or internal dashboard app server in production runtime.
-- For OAuth/OIDC callback handling, Redis-backed app sessions, protected server functions, BFF behavior, or app-owned resources, use [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md) instead of this static profile.
+- For OAuth/OIDC callback handling, Redis-backed app sessions, protected server functions, BFF behavior, or app-owned resources, use [TanStack Start](web-tanstack-start.md) instead of this static profile.
 - TLS terminates at Nginx with Let's Encrypt certificates in Docker volumes.
 - Certbot sidecars handle issuance and renewal.
 - Static hashed assets use immutable cache; `index.html` uses no-cache or must-revalidate.
@@ -332,7 +337,7 @@ Tier 3 requirements:
 ## See Also
 
 - [Backend: Bun + Elysia](backend-bun-elysia.md)
-- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [TanStack Start](web-tanstack-start.md)
+- [React + Vite](web-react-vite.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)

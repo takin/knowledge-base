@@ -1,17 +1,17 @@
-# Web Stack: Astro Landing
+# Web Stack: Astro
 
 Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22); Internal standalone repository structure draft (2026-06-09)
+Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-06-09); Internal standalone repository structure draft (2026-06-09)
 Platform: Web / public landing
 Runtime: Bun
 Framework: Astro
-Primary Use Case: Public marketing websites, SEO pages, MDX-in-repo blogs, static-first landing pages, and Cloudflare Pages deployment
-Raw: [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
+Primary Use Case: Astro web projects, commonly public marketing websites, SEO pages, MDX-in-repo blogs, static-first landing pages, and Cloudflare Pages deployment
+Raw: [2026-05-22-web-astro-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
-Astro is the standard for landing page projects. Landing repositories are standalone under the `<product>-landing` naming convention, separate from dashboard, API, and mobile repositories. The baseline is static-first, MDX-in-repo, SEO-oriented, and deployed to Cloudflare Pages as static `dist/` output.
+Astro is the standard for Astro web projects. It is commonly the best fit for landing pages, public marketing sites, SEO pages, and MDX-in-repo content. The baseline is static-first, MDX-in-repo, SEO-oriented, and deployed to Cloudflare Pages as static `dist/` output.
 
 Astro SSR is not part of the baseline. It requires a product-level ADR naming the freshness requirement, cache strategy, and deployment adapter. React is allowed only for isolated islands, not for hydrating full marketing pages.
 
@@ -202,6 +202,23 @@ bun install --frozen-lockfile
 bun run build
 ```
 
+## Optional Docker Runtime
+
+Cloudflare Pages remains the default deployment target for static landing projects. When a landing project explicitly adopts VPS/Docker deployment, every Docker image must use pinned Alpine, slim, distroless, or smallest production-suitable variants when compatible, and final runtime images target below `200 MB`.
+
+Static Astro output should use a minimal pinned Nginx or Brotli-enabled Nginx runtime that serves `dist/` directly and contains zero `node_modules`.
+
+Approved Astro SSR or Node-compatible server output uses a Bun Alpine build stage, a production-only `runtime-deps` stage, and a pinned Node Alpine runtime when the output is Node-compatible. The runtime dependency stage sets `NODE_ENV=production`, runs `bun install --frozen-lockfile --production --linker hoisted`, and removes Bun install cache and `/tmp/*` before the final image copies `node_modules`.
+
+Rules:
+- Use the Node Alpine runtime only when the build output is Node-compatible.
+- Use a Bun Alpine/slim runtime when runtime behavior depends on Bun APIs.
+- Do not copy `node_modules` from build/dev stages into the final runtime image.
+- Final SSR runtime `node_modules` must come only from a dedicated production-only `runtime-deps` stage.
+- In monorepos, copy only package manifests needed by the Astro app or use a minimal generated runtime `package.json` so unrelated workspace packages are not installed.
+- Do not copy source files, development `node_modules`, test artifacts, coverage, build caches, install caches, temporary files, `.env*`, `.git`, or public source maps into the final runtime image.
+- Upload private source maps before producing the final runtime image and remove public `.map` files from served assets.
+
 ## Security
 
 - Never use unsanitized `set:html` with untrusted content.
@@ -257,7 +274,7 @@ Recommended checks:
 
 ## See Also
 
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [React + Vite](web-react-vite.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
 - [Repository Structure: Standalone Repos](repository-structure-standalone.md)

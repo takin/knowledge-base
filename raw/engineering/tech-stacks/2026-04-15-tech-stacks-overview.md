@@ -21,7 +21,7 @@ Examples:
 
 | Stack Family | Current Stack | Future Examples |
 |---|---|---|
-| Web | `web-astro-landing`, `web-react-vite-dashboard` | `web-svelte-sveltekit`, `web-solid-solidstart`, `web-react-nextjs` |
+| Web | `web-astro`, `web-react-vite`, `web-tanstack-start` | `web-svelte-sveltekit`, `web-solid-solidstart`, `web-react-nextjs` |
 | Backend API | `backend-bun-elysia` | `backend-go-chi`, `backend-go-fiber`, `backend-rust-axum` |
 | Mobile | `mobile-react-native-expo` | `mobile-flutter` |
 | Infrastructure | `infra-docker-compose-nginx` | `infra-kubernetes-nginx`, `infra-flyio` |
@@ -30,8 +30,9 @@ Examples:
 
 | Stack | Platform | Runtime | Framework / Core Tools | Source |
 |---|---|---|---|---|
-| Web: Astro Landing | Public marketing / SEO landing | Bun | Astro, MDX, Content Collections, Tailwind, Cloudflare Pages | `2026-05-22-web-astro-landing-stack.md` |
-| Web: React + Vite Dashboard | Authenticated SaaS dashboard / API-only SPA | Bun | React, Vite, TanStack Router/Query/Form/Table, Zustand, OpenAPI client, Docker Compose, Nginx static runtime, Let's Encrypt via Certbot sidecar | `2026-05-22-web-react-vite-dashboard-stack.md` |
+| Web: Astro | Commonly public marketing / SEO landing | Bun | Astro, MDX, Content Collections, Tailwind, Cloudflare Pages | `2026-05-22-web-astro-stack.md` |
+| Web: React + Vite | Commonly authenticated SaaS dashboard / API-only SPA | Bun | React, Vite, TanStack Router/Query/Form/Table, Zustand, OpenAPI client, Docker Compose, Nginx static runtime, Let's Encrypt via Certbot sidecar | `2026-05-22-web-react-vite-stack.md` |
+| Web: TanStack Start | Commonly authenticated SaaS app / server runtime | Bun | TanStack Start, React, server functions, SSR, Redis sessions, Docker Compose, Nginx runtime | `2026-06-04-web-tanstack-start-stack.md` |
 | Backend: Bun + Elysia | SaaS backend API / public API / mobile API / async workers | Bun | Elysia, OpenAPI, JWT/JWKS, RBAC, Drizzle, PostgreSQL 18+, PgBouncer, Redis 8+, BullMQ, S3-compatible storage, OpenTelemetry | `2026-04-15-backend-bun-elysia-stack.md` |
 | Mobile: React Native + Expo | Mobile | Expo / JS | React Native, Expo Router, NativeWind, Maestro | `2026-04-15-mobile-react-native-expo-stack.md` |
 | Infrastructure: Docker Compose + Nginx | Infrastructure | Docker | Docker Compose, `fholzer/nginx-brotli`, Let's Encrypt Certbot sidecar, PgBouncer, Vault, Kubernetes tier | `2026-04-15-infra-docker-compose-nginx-stack.md` |

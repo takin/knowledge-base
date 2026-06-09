@@ -1775,10 +1775,11 @@ flowchart TB
 Backend projects use one Bun application image for both the API process and worker process. Docker Compose changes runtime behavior through the container command.
 
 Rules:
-- Use a pinned smallest production-suitable Bun image, preferably Alpine or slim if available and compatible. Do not use `latest`.
+- Use a pinned smallest production-suitable Bun image, preferably `oven/bun:<pinned-version>-alpine` or a slim-compatible Bun image. Do not use `latest`.
+- Final API/worker runtime images must target below `200 MB`; exceeding this budget requires an ADR or documented implementation note with measured image size and justification.
 - Build one application image, for example `example-api:${TAG}`.
 - The `api` service uses the image default command.
-- The `worker` service uses the same image with `command: ["bun", "run", "worker"]`.
+- The `worker` service uses the same image with a built worker command, for example `command: ["bun", "dist/worker.js"]`.
 - Do not create separate API and worker images unless the project has a documented size, security, or dependency-isolation reason.
 - Runtime containers run as a non-root user.
 - The application image exposes only the internal API port, usually `3000`.
@@ -1791,35 +1792,45 @@ Rules:
 - Follow the infrastructure Docker image size and final runtime policy.
 - Final API/worker images must contain production dependencies only.
 - Do not copy development `node_modules` into the runtime stage.
+- Do not copy `node_modules` from the build or deps stage into the final runtime image.
+- Final runtime `node_modules` must come only from a dedicated production-only `runtime-deps` stage.
 - Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages must use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
-- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, TypeScript compilers, linters, formatters, local test utilities, and codegen-only packages are absent from final `node_modules`.
+- Runtime images must not contain source directories, tests, coverage, test reports, build caches, install caches, temporary files, `.env*`, `.git`, or public source maps unless explicitly approved.
 
 Recommended multi-stage Dockerfile:
 
 ```dockerfile
-FROM oven/bun:<pinned-version> AS deps
+FROM oven/bun:<pinned-version>-alpine AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --linker hoisted
 
-FROM oven/bun:<pinned-version> AS build
+FROM oven/bun:<pinned-version>-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN bun run typecheck
 RUN bun run build
 
-FROM oven/bun:<pinned-version> AS runtime
+FROM oven/bun:<pinned-version>-alpine AS runtime-deps
+WORKDIR /runtime
+ENV NODE_ENV=production
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --linker hoisted \
+  && rm -rf /root/.bun/install/cache /tmp/*
+
+FROM oven/bun:<pinned-version>-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+COPY --from=runtime-deps /runtime/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY package.json ./package.json
 
 USER bun
 EXPOSE 3000
-CMD ["bun", "run", "start"]
+CMD ["bun", "dist/index.js"]
 ```
 
 Recommended Compose usage:
@@ -1834,7 +1845,7 @@ services:
 
   worker:
     image: example-api:${TAG}
-    command: ["bun", "run", "worker"]
+    command: ["bun", "dist/worker.js"]
     stop_grace_period: 60s
 ```
 

@@ -1,4 +1,4 @@
-# Web Stack: React + Vite Dashboard
+# Web Stack: React + Vite
 
 Source URL: Internal draft
 Collected: 2026-05-22
@@ -607,9 +607,11 @@ ENTRYPOINT ["/entrypoint.sh"]
 Rules:
 - Use a pinned smallest production-suitable Bun image in build stages, preferably Alpine or slim if available and compatible; never use `latest`.
 - Use `fholzer/nginx-brotli:<pinned-version>` or the approved smallest production-suitable Brotli Nginx runtime image in the runtime stage; never use `latest`.
+- Final dashboard runtime images must target below `200 MB`; exceeding this budget requires an ADR or documented implementation note with measured image size and justification.
 - The runtime stage contains only built static assets and Nginx config files.
 - The runtime stage must contain zero `node_modules`.
 - Do not copy development `node_modules` into the final image.
+- Do not copy any `node_modules`, package manager cache, source directory, test artifact, build cache, or temporary file into the final image.
 - Do not install Certbot into the dashboard image.
 - Do not run `bun`, `node`, `vite`, or `vite preview` in the runtime image.
 - Do not mount `dist/` from the host as the production deployment mechanism.

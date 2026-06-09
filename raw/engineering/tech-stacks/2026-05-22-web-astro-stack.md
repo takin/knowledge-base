@@ -1,4 +1,4 @@
-# Web Stack: Astro Landing
+# Web Stack: Astro
 
 Source URL: Internal draft
 Collected: 2026-05-22
@@ -303,6 +303,57 @@ Baseline output directory:
 ```text
 dist
 ```
+
+### 13.1 Optional Docker Runtime
+
+Docker is not the default for static landing projects. When a landing project explicitly adopts VPS/Docker deployment, every Docker image must use pinned Alpine, slim, distroless, or smallest production-suitable variants when compatible, and the final runtime image must target below `200 MB`.
+
+For static Astro output, prefer a minimal pinned Nginx or Brotli-enabled Nginx runtime that serves `dist/` directly and contains zero `node_modules`.
+
+For approved Astro SSR or Node-compatible server output, use a Bun Alpine build stage, a production-only runtime dependency stage, and a pinned Node Alpine runtime:
+
+```dockerfile
+FROM oven/bun:<pinned-version>-alpine AS build
+WORKDIR /app
+ENV ASTRO_TELEMETRY_DISABLED=1
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --linker hoisted
+
+COPY . .
+RUN bun run build
+
+FROM oven/bun:<pinned-version>-alpine AS runtime-deps
+WORKDIR /runtime
+ENV NODE_ENV=production
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --linker hoisted \
+  && rm -rf /root/.bun/install/cache /tmp/*
+
+FROM node:<pinned-version>-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=4321
+
+COPY --from=runtime-deps /runtime/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+
+EXPOSE 4321
+USER node
+
+CMD ["node", "dist/server/entry.mjs"]
+```
+
+Rules:
+- Use the Node Alpine runtime only when the build output is Node-compatible.
+- Use a Bun Alpine/slim runtime instead when runtime behavior depends on Bun APIs.
+- Do not copy `node_modules` from build/dev stages into the final runtime image.
+- Final runtime `node_modules`, when needed for SSR, must come only from a dedicated production-only `runtime-deps` stage.
+- In monorepos, copy only the package manifests needed by the Astro app or use a minimal generated runtime `package.json` so unrelated workspace packages are not installed.
+- Do not copy source files, development `node_modules`, test artifacts, coverage, build caches, install caches, temporary files, `.env*`, `.git`, or public source maps into the final runtime image.
+- Upload private source maps before producing the final runtime image and remove public `.map` files from served assets.
 
 ## 14. Environment Variables
 

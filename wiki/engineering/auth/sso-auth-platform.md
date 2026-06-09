@@ -541,7 +541,7 @@ Audit logs should capture:
 
 ## Related Engineering Standards
 
-- [Web Stack: TanStack Start OAuth/OIDC App](../tech-stacks/web-tanstack-start-oauth-oidc.md)
+- [Web Stack: TanStack Start](../tech-stacks/web-tanstack-start.md)
 - [Backend Stack: Bun + Elysia](../tech-stacks/backend-bun-elysia.md)
 - [Mobile Stack: React Native + Expo](../tech-stacks/mobile-react-native-expo.md)
 - [Security Baseline: Web Applications](../tech-stacks/security-web-app-baseline.md)

@@ -2,12 +2,12 @@
 
 Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-05-23); Internal Drizzle schema organization decision (2026-05-25); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal standalone repository structure draft (2026-06-09)
+Sources: Internal Tech Stacks draft (2026-04-15, updated 2026-06-09); Internal Drizzle schema organization decision (2026-05-25); Internal TanStack Start stack draft (2026-06-04, updated 2026-06-09); Internal standalone repository structure draft (2026-06-09)
 Platform: Backend API
 Runtime: Bun
 Framework: Elysia
 Primary Use Case: Standalone `<product>-api` SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
-Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
+Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
@@ -531,8 +531,9 @@ Deployment uses Docker Compose behind Nginx on VPS. Baseline services are `nginx
 
 Dockerfile standard:
 - One Bun application image is used for both API and worker.
-- Use a pinned smallest production-suitable Bun image, preferably Alpine or slim if available and compatible; never `latest`.
-- API uses the default command; worker uses `command: ["bun", "run", "worker"]`.
+- Use a pinned smallest production-suitable Bun image, preferably `oven/bun:<pinned-version>-alpine` or a slim-compatible Bun image; never `latest`.
+- Final API/worker runtime images target below `200 MB`; exceeding the budget requires an ADR or implementation note with measured size and justification.
+- API uses the default command; worker uses the same image with a built worker command such as `command: ["bun", "dist/worker.js"]`.
 - The Nginx gateway image must be based on `fholzer/nginx-brotli:<pinned-version>` with Brotli enabled by default.
 - Let's Encrypt issuance and renewal must be handled by Certbot sidecars with shared certificate volumes; do not install Certbot into the API or Nginx image.
 - Runtime containers run as non-root.
@@ -541,8 +542,13 @@ Dockerfile standard:
 - `.dockerignore` excludes `.env*`, `.git`, `node_modules`, `.venv`, coverage, test reports, Playwright reports, caches, and local artifacts.
 - Final API/worker images contain production dependencies only.
 - Do not copy development `node_modules` into the runtime stage.
+- Do not copy `node_modules` from build or deps stages into the final runtime image.
+- Final runtime `node_modules` must come only from a dedicated production-only `runtime-deps` stage.
 - Build stages may install dev dependencies for typecheck, build, or codegen, but runtime stages use `bun install --frozen-lockfile --production` or an equivalent production-only dependency set.
-- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, and codegen-only packages are absent from final `node_modules`.
+- Every Docker build requires a final-image dependency review to verify dev dependencies, package manager caches, test tooling, Playwright browsers, TypeScript compilers, linters, formatters, local test utilities, and codegen-only packages are absent from final `node_modules`.
+- Runtime images must not contain source directories, tests, coverage, test reports, build caches, install caches, temporary files, `.env*`, `.git`, or public source maps unless explicitly approved.
+
+Reference Dockerfile pattern: build/typecheck with dev dependencies in build stages, create a separate `runtime-deps` stage with `NODE_ENV=production` and `bun install --frozen-lockfile --production --linker hoisted`, remove Bun install cache and `/tmp/*`, then copy only `runtime-deps` `node_modules`, built `dist/`, and required runtime manifests into the final Bun Alpine runtime.
 
 ## Testing And CI
 
@@ -594,9 +600,9 @@ Test placement rules:
 | Exposing API container ports to host | Nginx is the only host-facing service |
 | Workers inside API process | Separate worker process/container |
 | `oven/bun:latest` | Pinned smallest production-suitable Bun image |
-| Large non-minimal runtime image without ADR | Alpine/slim/smallest compatible runtime image |
+| Large non-minimal runtime image without ADR | Alpine/slim/smallest compatible runtime image under the `200 MB` target |
 | Final API/worker image includes dev dependencies | Production-only runtime dependency install |
-| Copying development `node_modules` into runtime stage | Reinstall or copy production dependencies only |
+| Copying development `node_modules` into runtime stage | Copy `node_modules` only from production-only `runtime-deps` |
 | Infinite retries or unbounded backoff | Bounded attempts, capped exponential backoff, DLQ, alerting |
 
 ## See Also
@@ -604,7 +610,7 @@ Test placement rules:
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
-- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [TanStack Start](web-tanstack-start.md)
+- [React + Vite](web-react-vite.md)
 - [Mobile: React Native + Expo](mobile-react-native-expo.md)
 - [Repository Structure: Standalone Repos](repository-structure-standalone.md)

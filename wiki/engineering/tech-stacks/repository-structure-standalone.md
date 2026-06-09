@@ -346,7 +346,7 @@ Use Turborepo or equivalent task orchestration only inside approved monorepos.
 ## See Also
 
 - [Backend: Bun + Elysia](backend-bun-elysia.md)
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
-- [Astro Landing](web-astro-landing.md)
+- [React + Vite](web-react-vite.md)
+- [Astro](web-astro.md)
 - [Mobile: React Native + Expo](mobile-react-native-expo.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)

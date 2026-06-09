@@ -54,6 +54,6 @@ NativeWind v4 preserves the Tailwind mental model across web and mobile. It lets
 ## See Also
 
 - [Backend: Bun + Elysia](backend-bun-elysia.md)
-- [React + Vite Dashboard](web-react-vite-dashboard.md)
+- [React + Vite](web-react-vite.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
 - [Repository Structure: Standalone Repos](repository-structure-standalone.md)

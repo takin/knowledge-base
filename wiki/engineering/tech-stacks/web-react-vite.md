@@ -1,17 +1,17 @@
-# Web Stack: React + Vite Dashboard
+# Web Stack: React + Vite
 
 Updated: 2026-06-09
 Status: Draft
-Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-05-23); Internal Backend Stack draft (2026-04-15, updated 2026-05-23); Internal Infrastructure draft (2026-04-15, updated 2026-05-23); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-05-23); Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal standalone repository structure draft (2026-06-09)
+Sources: Internal Tech Stacks draft (2026-05-22, updated 2026-06-09); Internal Backend Stack draft (2026-04-15, updated 2026-06-09); Internal Infrastructure draft (2026-04-15, updated 2026-06-09); Internal Security Baseline draft (2026-04-15, updated 2026-05-22); Internal CI and Testing draft (2026-04-15, updated 2026-06-09); Internal TanStack Start stack draft (2026-06-04, updated 2026-06-09); Internal standalone repository structure draft (2026-06-09)
 Platform: Web / authenticated SaaS dashboard
 Runtime: Bun
 Framework: React + Vite SPA
-Primary Use Case: Authenticated SaaS dashboards in standalone `<product>-dashboard` repositories consuming a mandatory separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
-Raw: [2026-05-22-web-react-vite-dashboard-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-dashboard-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
+Primary Use Case: React + Vite web projects, commonly static API-client dashboards consuming a separate backend API through generated OpenAPI clients, with no SEO or SSR requirement, deployed as static Vite output through Docker Compose and Nginx
+Raw: [2026-05-22-web-react-vite-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-react-vite-stack.md); [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-04-15-infra-docker-compose-nginx-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-infra-docker-compose-nginx-stack.md); [2026-04-15-security-baseline.md](../../../raw/engineering/tech-stacks/2026-04-15-security-baseline.md); [2026-04-15-ci-testing-typescript-react.md](../../../raw/engineering/tech-stacks/2026-04-15-ci-testing-typescript-react.md); [2026-04-15-tech-stacks-overview.md](../../../raw/engineering/tech-stacks/2026-04-15-tech-stacks-overview.md); [2026-06-04-web-tanstack-start-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
-React + Vite SPA is the standard for authenticated SaaS dashboards. Dashboard repositories are standalone and separate from landing and API repositories. The dashboard does not need SEO, must not use SSR, and must not own backend logic.
+React + Vite SPA is the standard for React + Vite web projects. It is commonly the best fit for authenticated SaaS dashboards that consume a separate backend API. The app does not need SEO, must not use SSR, and must not own backend logic.
 
 The backend API is mandatory and owns authentication, authorization, validation, persistence, and business rules. The dashboard consumes the backend through generated OpenAPI clients and treats route guards as UX only.
 
@@ -19,7 +19,7 @@ SaaS administration screens for tenant settings, tenant users, subscriptions, en
 
 This article is the source of truth for dashboard-specific static deployment. Infrastructure docs retain generic Docker Compose and Nginx rules, but dashboard deployment details live here.
 
-For SaaS apps that require OAuth2/OIDC callback handling, server-side code exchange, Redis-backed HttpOnly app sessions, protected server functions, BFF behavior, or full-stack app-server resource ownership, use [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md) instead of this static SPA stack.
+For SaaS apps that require OAuth2/OIDC callback handling, server-side code exchange, Redis-backed HttpOnly app sessions, protected server functions, BFF behavior, or full-stack app-server resource ownership, use [TanStack Start](web-tanstack-start.md) instead of this static SPA stack.
 
 ## Runtime And Toolchain
 
@@ -331,11 +331,13 @@ Artifact hardening:
 - Runtime stage contains only built static assets and Nginx config files.
 - Runtime stage contains zero `node_modules`.
 - Do not copy development `node_modules` into the final image.
+- Do not copy any `node_modules`, package manager cache, source directory, test artifact, build cache, or temporary file into the final image.
 - Do not install Certbot in the dashboard image.
 - Do not mount `dist/` from host as the production deployment mechanism.
 - Do not copy public source maps into served assets.
 - `.dockerignore` must exclude `.git`, `.github`, `.env`, `.env.*`, caches, coverage, Playwright reports, test results, logs, and `*.map` unless a private source-map upload flow removes them before final image.
 - Use pinned smallest production-suitable build and runtime image variants where available and compatible; never use `latest`.
+- Final dashboard runtime images target below `200 MB`; exceeding the budget requires an ADR or implementation note with measured image size and justification.
 - Every dashboard Docker build requires a final-image review confirming the image contains only `dist/`, Nginx config, entrypoint, and minimal runtime files.
 
 ## Security
@@ -413,8 +415,8 @@ Required E2E coverage before production:
 
 ## See Also
 
-- [Astro Landing](web-astro-landing.md)
-- [TanStack Start OAuth/OIDC App](web-tanstack-start-oauth-oidc.md)
+- [Astro](web-astro.md)
+- [TanStack Start](web-tanstack-start.md)
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
