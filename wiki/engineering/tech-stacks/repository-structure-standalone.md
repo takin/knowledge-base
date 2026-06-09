@@ -7,7 +7,7 @@ Platform: Cross-stack repository structure
 Runtime: N/A
 Framework: N/A
 Primary Use Case: Standard repository boundaries for products split across backend API, dashboard, landing page, and mobile deployables
-Raw: [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
+Raw: [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 

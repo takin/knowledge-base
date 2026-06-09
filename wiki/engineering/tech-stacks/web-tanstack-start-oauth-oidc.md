@@ -1,13 +1,13 @@
 # Web Stack: TanStack Start OAuth/OIDC App
 
-Updated: 2026-06-04
+Updated: 2026-06-09
 Status: Draft
-Sources: Internal TanStack Start OAuth/OIDC stack draft (2026-06-04)
+Sources: Internal TanStack Start OAuth/OIDC stack draft (2026-06-04); Internal SSO Auth Project draft (2026-06-09)
 Platform: Web / authenticated SaaS app
 Runtime: Bun
 Framework: TanStack Start
 Primary Use Case: Authenticated SaaS web applications that require OAuth2/OIDC, SSO, server-managed sessions, SSR, protected server functions, BFF behavior, or first-party app-server resource management
-Raw: [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md)
+Raw: [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [sso-auth.md](../../../raw/engineering/auth/sso-auth.md)
 
 ## Summary
 
@@ -15,7 +15,7 @@ TanStack Start is the default web frontend stack for SaaS applications that requ
 
 Use this stack when the web app must initiate OAuth/OIDC login, receive callback routes, exchange authorization codes server-side, manage a secure app session, protect server functions, act as a Backend-for-Frontend, or directly own product resources from a server runtime.
 
-Better Auth is the current self-hosted auth service standard, but this stack stays provider-neutral and can use any standards-compliant OAuth2/OIDC provider. The auth service owns login, SSO, credential handling, consent, issuer metadata, token issuance, JWKS, token revocation, and account-level auth policy. The TanStack Start app owns product session, tenant resolution, route protection, app authorization, server functions, and resource access.
+Better Auth is the current self-hosted auth service standard, but this stack stays provider-neutral and can use any standards-compliant OAuth2/OIDC provider. For the dedicated shared SSO platform, [SSO Auth Platform](../auth/sso-auth-platform.md) now defines Better Auth as the MVP authentication engine while the SSO product owns policy, branding, auditability, and app governance. The auth service owns login, SSO, credential handling, consent, issuer metadata, token issuance, JWKS, token revocation, and account-level auth policy. The TanStack Start app owns product session, tenant resolution, route protection, app authorization, server functions, and resource access.
 
 React + Vite remains the dashboard standard for static API-only SPAs. The dividing line is runtime ownership: React + Vite Dashboard is static and consumes a backend API; TanStack Start OAuth/OIDC App has a production server runtime and participates in the authentication/resource boundary.
 
@@ -581,3 +581,4 @@ Test placement rules:
 - [Infrastructure: Docker Compose + Nginx](infra-docker-compose-nginx.md)
 - [Security Baseline: Web Applications](security-web-app-baseline.md)
 - [CI and Testing: TypeScript + React](ci-testing-typescript-react.md)
+- [SSO Auth Platform](../auth/sso-auth-platform.md)

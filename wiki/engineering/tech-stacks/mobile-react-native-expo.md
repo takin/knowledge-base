@@ -7,7 +7,7 @@ Platform: Mobile
 Runtime: Expo / JavaScript
 Framework: React Native + Expo Router
 Primary Use Case: Standalone mobile applications consuming the backend API through generated OpenAPI clients, with independent CI, EAS builds, and app store release flow
-Raw: [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
+Raw: [2026-04-15-mobile-react-native-expo-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-mobile-react-native-expo-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 

@@ -7,7 +7,7 @@ Platform: Web / public landing
 Runtime: Bun
 Framework: Astro
 Primary Use Case: Public marketing websites, SEO pages, MDX-in-repo blogs, static-first landing pages, and Cloudflare Pages deployment
-Raw: [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
+Raw: [2026-05-22-web-astro-landing-stack.md](../../../raw/engineering/tech-stacks/2026-05-22-web-astro-landing-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 

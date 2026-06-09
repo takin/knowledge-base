@@ -144,3 +144,18 @@
 - Updated: Web Stack: Astro Landing.
 - Updated: Mobile Stack: React Native + Expo.
 - Updated: CI and Testing: TypeScript + React.
+
+## [2026-06-09] ingest | SSO Auth Platform
+- Created: SSO Auth Platform.
+- Created: Auth Index.
+- Updated: Engineering Index.
+
+## [2026-06-09] lint | 7 issues found, 7 auto-fixed
+- Fixed stale raw reference links for `2026-06-09-repository-structure-standalone.md` in engineering tech stack wiki articles.
+- Verified: 0 broken wiki markdown links remain.
+
+## [2026-06-09] ingest | SSO Auth Better Auth Decision
+- Updated: SSO Auth Platform.
+- Updated: Auth Index.
+- Updated: Web Stack: TanStack Start OAuth/OIDC App.
+- Added Better Auth as the MVP authentication engine while keeping product policy, branding, auditability, and app governance in the custom SSO platform layer.

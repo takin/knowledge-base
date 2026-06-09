@@ -7,7 +7,7 @@ Platform: Backend API
 Runtime: Bun
 Framework: Elysia
 Primary Use Case: Standalone `<product>-api` SaaS APIs, SaaS administration, public APIs, mobile APIs, webhooks, async workers, media workflows, and independently deployable backend surfaces
-Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/draft/engineering/2026-06-09-repository-structure-standalone.md)
+Raw: [2026-04-15-backend-bun-elysia-stack.md](../../../raw/engineering/tech-stacks/2026-04-15-backend-bun-elysia-stack.md); [2026-05-25-backend-drizzle-schema-organization.md](../../../raw/engineering/tech-stacks/2026-05-25-backend-drizzle-schema-organization.md); [2026-06-04-web-tanstack-start-oauth-oidc-stack.md](../../../raw/engineering/tech-stacks/2026-06-04-web-tanstack-start-oauth-oidc-stack.md); [2026-06-09-repository-structure-standalone.md](../../../raw/engineering/tech-stacks/2026-06-09-repository-structure-standalone.md)
 
 ## Summary
 
