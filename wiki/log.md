@@ -177,3 +177,11 @@
 - Renamed: Web Stack: TanStack Start App -> Web Stack: TanStack Start.
 - Updated active raw and wiki links to `web-astro`, `web-react-vite`, and `web-tanstack-start`.
 - Kept project-fit guidance inside each stack article so projects decide which stack to use.
+
+## [2026-06-10] maintenance | Split CI/Testing TypeScript + React into focused articles
+- Deleted: CI and Testing: TypeScript + React (source raw file removed).
+- Created: TypeScript Linting and Formatting — Oxc toolchain, strict TypeScript, type checking.
+- Created: React Tooling — React Compiler, React Doctor, React-specific linting/formatting.
+- Created: CI/CD: TypeScript — GitHub Actions pipelines, bundle checks, Docker/static artifact scans.
+- Updated: Tech Stacks Index — replaced single CI/Testing row with three focused rows, updated raw references.
+- Updated: Tech Stacks Index updated date to 2026-06-10.
